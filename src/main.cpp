@@ -35,7 +35,7 @@ void setup() {
   });
   server.on("/log", [] { server.send(200, "text/plain", netlog.text()); });
   server.on("/token", HTTP_POST, [] {
-    Tokens t;
+    static Tokens t;  // ponytail: fuera de la pila del handler, ver store.h
     loadTokens(t);  // conserva lo que ya hubiera si solo llega uno de los dos args
     if (server.arg("access").length()) snprintf(t.access, sizeof t.access, "%s", server.arg("access").c_str());
     if (server.arg("refresh").length()) snprintf(t.refresh, sizeof t.refresh, "%s", server.arg("refresh").c_str());
@@ -43,7 +43,7 @@ void setup() {
     server.send(200, "text/plain", "guardado");
   });
   server.on("/poll", [] {
-    Tokens t;
+    static Tokens t;  // ponytail: fuera de la pila del handler, ver store.h
     if (!loadTokens(t)) { server.send(400, "text/plain", "sin token guardado"); return; }
     time_t now = 0;
     for (int i = 0; i < 40 && (now = time(nullptr)) < 1600000000; i++) delay(250);

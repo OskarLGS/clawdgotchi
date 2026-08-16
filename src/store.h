@@ -16,7 +16,12 @@ inline bool saveFile(const char* path, const char* data) {
   return true;
 }
 
-inline bool loadConfig(Config& c)  { char b[768];  return loadFile("/config.json", b, sizeof b) && configFromJson(b, c); }
-inline bool saveConfig(const Config& c) { char b[768];  return configToJson(c, b, sizeof b) && saveFile("/config.json", b); }
-inline bool loadTokens(Tokens& t)  { char b[3072]; return loadFile("/tokens.json", b, sizeof b) && tokensFromJson(b, t); }
-inline bool saveTokens(const Tokens& t) { char b[3072]; return tokensToJson(t, b, sizeof b) && saveFile("/tokens.json", b); }
+// ponytail: buffers `static` en vez de la pila del handler. En ESP8266 los
+// handlers de ESP8266WebServer corren en la pila "cont" (~4KB); Tokens (~2.6KB)
+// + char[3072] localmente en cada llamada desbordaba y reiniciaba el cubo.
+// Single-threaded (sin reentrada real: handleClient() procesa una request a
+// la vez), asi que static es seguro y es el fix minimo.
+inline bool loadConfig(Config& c)  { static char b[768];  return loadFile("/config.json", b, sizeof b) && configFromJson(b, c); }
+inline bool saveConfig(const Config& c) { static char b[768];  return configToJson(c, b, sizeof b) && saveFile("/config.json", b); }
+inline bool loadTokens(Tokens& t)  { static char b[3072]; return loadFile("/tokens.json", b, sizeof b) && tokensFromJson(b, t); }
+inline bool saveTokens(const Tokens& t) { static char b[3072]; return tokensToJson(t, b, sizeof b) && saveFile("/tokens.json", b); }
