@@ -1,4 +1,5 @@
 #pragma once
+#include <Arduino.h>
 #include <ESP8266WebServer.h>
 #include "store.h"
 #include "quota.h"
@@ -80,6 +81,7 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
     cfg.pollMinutes = s.arg("poll").toInt();
     snprintf(cfg.webPass, sizeof cfg.webPass, "%s", s.arg("webpass").c_str());
     saveConfig(cfg);
+    setTZ(cfg.tz);  // aplicar TZ inmediatamente sin necesidad de reiniciar
     displayBrightness(cfg.brightness);
     s.sendHeader("Location", "/");
     s.send(303);

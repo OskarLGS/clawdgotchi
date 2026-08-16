@@ -57,10 +57,13 @@ void setup() {
   // Sin argumentos: desactiva demos. Se retira en la task 14.
   server.on("/demo", [] {
     if (!webAuth(server, cfg)) return;
+    // Limpia pantalla y invalida ambos modos en cualquier cambio
+    tft.fillScreen(TFT_BLACK);
+    clockInvalidate();
+    tamaInvalidate();
     if (server.hasArg("clock")) {
       demoClock = server.arg("clock").toInt() != 0;
       demoMood = -1;  // desactiva mood si activamos clock
-      clockInvalidate();
       server.send(200, "text/plain", String("demoClock=") + (demoClock ? "true" : "false"));
     } else if (server.hasArg("mood")) {
       int v = server.arg("mood").toInt();
