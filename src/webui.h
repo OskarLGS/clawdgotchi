@@ -62,7 +62,7 @@ details{margin-top:14px}details summary{cursor:pointer;color:var(--muted);font-s
 <label>Pantalla</label>
 <select name=mode><option value=0 %M0%>Rotaci&oacute;n autom&aacute;tica</option><option value=1 %M1%>Solo tamagotchi</option><option value=2 %M2%>Solo reloj</option></select>
 <div class=row><div><label>Rotar cada (s)</label><input name=rot value=%ROT%></div><div><label>Consultar (min)</label><input name=poll value=%POLL%></div></div>
-<label>Brillo</label><input type=range name=brt min=5 max=100 value=%BRT%>
+<label>Brillo: <span id=bv>%BRT%</span>%</label><input type=range name=brt min=5 max=100 value=%BRT% oninput="bv.textContent=this.value">
 <label>Zona horaria (POSIX)</label><input name=tz value="%TZ%">
 <label>Contrase&ntilde;a web &mdash; usuario: admin</label><input name=webpass value="%WP%">
 <div class=muted>Reinicia el cubo para aplicar la contrase&ntilde;a tambi&eacute;n a /update.</div>
