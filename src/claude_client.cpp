@@ -58,7 +58,7 @@ PollStatus pollQuota(const char* accessToken, QuotaSnapshot& out) {
     st = ok ? PollStatus::OK : PollStatus::NET_ERROR;
   } else if (code == 401 || code == 403) st = PollStatus::AUTH_FAILED;
   else st = PollStatus::NET_ERROR;
-  LOGN("poll code=%d 5h=%u%% 7d=%u%% blk=%u", code, out.pct5h, out.pctWeek, ESP.getMaxFreeBlockSize());
+  LOGN("poll code=%d 5h=%u%% 7d=%u%%", code, out.pct5h, out.pctWeek);
   http.end();
   return st;
 }

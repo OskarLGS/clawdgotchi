@@ -120,20 +120,24 @@ inline bool oauthExchange(const String& codeInput, Tokens& out) {
   // servidor quepan en 8KB (lo habitual). El poll (api.anthropic.com) sigue en
   // 16384 porque ese si funciona y ahi la cadena es distinta.
   client.setBufferSizes(8192, 512);
-  LOGN("oauth blk=%u", ESP.getMaxFreeBlockSize());
   HTTPClient http;
   http.begin(client, "https://platform.claude.com/v1/oauth/token");
   http.addHeader("Content-Type", "application/json");
   int code_ = http.POST(body);
-  if (code_ != 200) {
-    LOGN("oauth exchange code=%d ssl=%d", code_, client.getLastSSLError());
-    http.end(); return false;
-  }
-
-  JsonDocument d;
-  DeserializationError e = deserializeJson(d, http.getStream());
+  // Lee el cuerpo completo a String (mas robusto que parsear el stream con el
+  // buffer TLS pequeno). Se lee pase lo que pase el codigo HTTP: en un 400 el
+  // cuerpo trae {"error":...} con el motivo exacto (no sensible).
+  String resp = http.getString();
   http.end();
-  if (e || !d["access_token"].is<const char*>()) { LOGN("oauth: json invalido"); return false; }
+  JsonDocument d;
+  DeserializationError e = deserializeJson(d, resp);
+  bool hasTok = d["access_token"].is<const char*>();
+  if (code_ != 200 || e || !hasTok) {
+    // En fallo se loguea el motivo del servidor (error field, no sensible).
+    const char* err = d["error"] | "";
+    LOGN("oauth fallo canje: code=%d err=%s perr=%s", code_, err, e.c_str());
+    return false;
+  }
 
   snprintf(out.access, sizeof out.access, "%s", (const char*)d["access_token"]);
   out.refresh[0] = 0;
