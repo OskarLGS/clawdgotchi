@@ -6,26 +6,20 @@
 #include "netlog.h"
 #include "ota.h"
 #include "store.h"
+#include "wifi_portal.h"
 #include "claude_client.h"
-
-#ifndef CLAWD_WIFI_SSID
-#define CLAWD_WIFI_SSID ""
-#define CLAWD_WIFI_PASS ""
-#endif
 
 NetLog netlog;
 ESP8266WebServer server(80);
 QuotaSnapshot quotaNow;
+Config cfg;
 static bool pollPedido = false;
 static uint32_t lastPollOk = 0;
 
 void setup() {
   LittleFS.begin();
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(CLAWD_WIFI_SSID, CLAWD_WIFI_PASS);
-  for (int i = 0; i < 60 && WiFi.status() != WL_CONNECTED; i++) delay(500);
-  LOGN("wifi: %s ip=%s", WiFi.status() == WL_CONNECTED ? "ok" : "FAIL",
-       WiFi.localIP().toString().c_str());
+  loadConfig(cfg);
+  wifiConnectOrPortal(cfg);
   MDNS.begin("clawdgotchi");
   configTime(0, 0, "pool.ntp.org");  // la validacion de certs necesita hora
   server.on("/", [] {
