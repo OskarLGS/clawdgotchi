@@ -8,7 +8,7 @@
 // HH:MM centrada en la pantalla (240x240), en FreeSansBold24pt (GFX sans-serif,
 // grande). FreeSansBold24pt7b lo declara TFT_eSPI al estar LOAD_GFXFF activo.
 static const int TIME_Y = 120;        // centro vertical
-static const int TIME_CLEAR_H = 70;   // franja a limpiar (la fuente mide ~46px)
+static const int TIME_CLEAR_H = 100;  // franja a limpiar (FreeSansBold24pt x2 ~= 90px)
 
 static bool s_force = true;
 
@@ -34,10 +34,12 @@ void drawClock(const tm& local) {
   if (changed) {
     tft.fillRect(0, TIME_Y - TIME_CLEAR_H / 2, 240, TIME_CLEAR_H, TFT_BLACK);
     tft.setFreeFont(&FreeSansBold24pt7b);
+    tft.setTextSize(2);           // x2: "HH:MM" ocupa casi todo el ancho
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.setTextDatum(CC_DATUM);   // centro-centro
     tft.drawString(timeStr, 120, TIME_Y);
-    tft.setTextFont(2);           // restaura la fuente por defecto para el resto
+    tft.setTextSize(1);           // restaura escala y fuente por defecto para el resto
+    tft.setTextFont(2);
     tft.setTextDatum(TL_DATUM);
     s_last.valid = true;
     snprintf(s_last.timeStr, sizeof s_last.timeStr, "%s", timeStr);
