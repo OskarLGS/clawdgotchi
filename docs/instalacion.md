@@ -24,6 +24,16 @@ pio run -e ultra && tools/flash-ota.sh          # clawdgotchi.local por defecto
 CLAWD_WEB_AUTH=admin:clave tools/flash-ota.sh   # si la web UI tiene password
 ```
 
+## Spike TLS (Task 5)
+
+`/spike?token=<token de \`claude setup-token\`>` prueba NTP + MFLN + TLS pineado
+(`src/certs.h`: GTS Root R4 para api.anthropic.com, ISRG Root YE para
+platform.claude.com) + POST mínimo a `api.anthropic.com/v1/messages`.
+Desplegado y verificado sin token (`/spike` → `400 falta ?token=`, `/` sigue
+vivo, heap=46856 maxblock=46344 tras el flasheo). Falta la ejecución con
+token real (la hace el usuario) para medir `mfln`, `maxblock` antes/después
+y `code=200` con las cabeceras de cuota — pendiente de anotar aquí.
+
 ## Recuperación
 
 - **Volver al stock**: subir `backup/FW-Smalltv-Ultra-V9.0.50.bin` por el

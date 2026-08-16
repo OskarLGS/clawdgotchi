@@ -4,6 +4,7 @@
 #include <ESP8266mDNS.h>
 #include "netlog.h"
 #include "ota.h"
+#include "spike.h"
 
 #ifndef CLAWD_WIFI_SSID
 #define CLAWD_WIFI_SSID ""
@@ -28,6 +29,7 @@ void setup() {
   });
   server.on("/log", [] { server.send(200, "text/plain", netlog.text()); });
   otaBegin(server);
+  spikeRoutes(server);
   server.begin();
   MDNS.addService("http", "tcp", 80);
 }
