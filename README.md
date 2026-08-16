@@ -1,129 +1,137 @@
-# clawdgotchi
+# 🦀 clawdgotchi
 
-**Firmware propio y autónomo para el GeekMagic SmallTV Ultra** que convierte el cubo en un tamagotchi de la mascota de Claude. Muestra las cuotas semanales de Claude Code (5h/semanal) + modo reloj NTP.
+**Firmware propio y autónomo para el GeekMagic SmallTV Ultra** que convierte el
+cubo en un tamagotchi de la mascota de Claude: muestra tus cuotas de uso de
+Claude Code (ventana de 5 h y semanal) con una mascota que cambia de humor, más
+un modo reloj. Se autentica **él solo** contra la API de Anthropic — sin PC ni
+demonio de por medio.
 
-> **Descargo:** Este proyecto no es afiliado a GeekMagic ni a Anthropic.
+> **Descargo:** proyecto no oficial, sin afiliación con GeekMagic ni Anthropic.
 
-## Mascota con cuota
+![La mascota Clawd en sus estados](assets/sprite_happy_0.png)
+![inquieta](assets/sprite_uneasy_0.png)
+![agobiada](assets/sprite_stressed_0.png)
+![pánico](assets/sprite_panic_0.png)
+![dormida](assets/sprite_sleeping_0.png)
+![desconectada](assets/sprite_offline_0.png)
 
-El humor lo decide la **peor** (más usada) de las dos cuotas de Claude Code
-que están en uso, la de 5h y la semanal — no la que queda libre:
+## Qué hace
 
-| Estado | Sprite |
-|--------|--------|
-| Contenta, <50% usada | ![happy](assets/sprite_happy_0.png) |
-| Inquieta, 50-74% usada | ![uneasy](assets/sprite_uneasy_0.png) |
-| Dormida, cuota agotada | ![sleeping](assets/sprite_sleeping_0.png) |
+- **Tamagotchi de cuotas.** La mascota (Clawd) tiene **6 humores** según la
+  **peor** de tus dos cuotas *usadas* (5 h y semanal), calculado en `moodFor()`:
+  contenta (<50 %), inquieta (50-74 %), agobiada (75-89 %), pánico (≥90 %),
+  dormida (cuota agotada, con cuenta atrás hasta el reset) y desconectada (sin
+  datos/WiFi). Debajo, dos barras coloreadas por nivel con la etiqueta y el
+  countdown: `5h (2h 57m)` … `19%`.
+- **Reloj** NTP con hora grande sans-serif (FreeSans Bold), zona horaria
+  configurable y **desplazamiento antiquemado** (la hora orbita unos píxeles
+  cada minuto).
+- **Rotación** automática entre tamagotchi y reloj, con **transición de fundido**
+  (fade) de duración ajustable.
+- **Autónomo de verdad.** El cubo obtiene el token de Claude **en el propio
+  dispositivo** mediante login OAuth (PKCE): abres Claude en el móvil, pegas un
+  código una vez, y el cubo guarda access + refresh token y se renueva para
+  siempre. Sin ordenador, sin CLI, sin `setup-token`.
+- **Interfaz web** (tarjetas, tema oscuro coral) para configurarlo todo:
+  pantalla, brillo, rotación, fade, zona horaria, servidor NTP, contraseña,
+  login de Claude y actualización OTA.
+- **A prueba de brickeo.** Tras 3 crashes seguidos arranca en modo seguro (solo
+  web UI + OTA) y se auto-recupera a los 30 s. La puerta OTA (`/update`) está
+  siempre disponible.
 
-La mascota tiene **6 humores**, calculados en `moodFor()` (`lib/core/quota.cpp`):
-- **Contenta** (happy, <50% usada): animación normal
-- **Inquieta** (uneasy, 50-74% usada)
-- **Agobiada** (stressed, 75-89% usada)
-- **Pánico** (panic, ≥90% usada)
-- **Dormida** (sleeping, cuota agotada — `status=rejected` o 100% usada): countdown de cuándo despierta
-- **Desconectada** (offline, sprite gris): sin datos válidos o sin WiFi
+## Hardware
 
-## Características
+GeekMagic **SmallTV Ultra**: ESP8266 (ESP-12F, 4 MB flash), pantalla IPS 1.54"
+240×240 ST7789 sobre SPI. Pines en `src/board.h` y `platformio.ini`.
 
-- **Reloj NTP** con zona horaria configurable
-- **Captive Portal WiFi** para configuración de credenciales sin código
-- **Web UI** con autenticación por contraseña
-- **Actualización OTA** — sin intervención física tras la primera instalación
-- **Modo seguro anti-brickeo** — si hay 3+ crashes consecutivos, el firmware entra en modo seguro y siempre expone `/update`
-- **Poll directo a Anthropic API** con handshake TLS pineado (sin demonio en el PC)
-  - Certs pineados: GTS Root R4 para `api.anthropic.com`, ISRG Root YE para `platform.claude.com`
-  - Buffers: RX=16KB, TX=512B (MFLN rechazado por el servidor)
-- **Memoria mínima**: heap máximo 35KB antes del handshake, margen suficiente
-- Durante la consulta TLS (~5 s cada pocos minutos) la animación se congela brevemente
+> ⚠️ Hay varios modelos con la misma carcasa y chips distintos (SmallTV ESP8266,
+> **Ultra**, Pro ESP32, clones ESP32-C2). Este firmware es **solo para el Ultra**;
+> flashear el modelo equivocado puede brickearlo. Confirma el modelo en
+> `http://<ip>/v.json` del firmware de fábrica (debe decir `SmallTV-Ultra`).
 
 ## Instalación
 
-La **primera instalación NO requiere abrir la caja ni cable UART**: se hace
-en dos pasos por `/update` (loader + firmware), ver
-[docs/instalacion.md](docs/instalacion.md). El UART es el plan B, solo para
-recuperación si el cubo se queda sin red.
+El hueco OTA del firmware de fábrica es pequeño, así que la primera vez se usa un
+*loader* en dos pasos (sin abrir la caja). Detalle completo en
+[`docs/instalacion.md`](docs/instalacion.md).
 
-A partir de la segunda instalación, todo se hace por OTA.
+1. **Backup** del firmware stock (red de seguridad) — del
+   [repo oficial](https://github.com/GeekMagicClock/smalltv-ultra).
+2. **Loader**: sube `smalltv-mod-loader.bin` (de las
+   [releases de smalltv-mod](https://github.com/giovi321/smalltv-mod/releases))
+   en `http://<ip>/update`. El cubo abre un AP `SmallTV-Loader`.
+3. **Clawdgotchi**: únete al AP y sube `.pio/build/ultra/firmware.bin` en
+   `http://192.168.4.1/update`.
 
-### Configuración rápida
+A partir de ahí, todas las actualizaciones van por OTA (`tools/flash-ota.sh`).
+Recuperación por UART como plan B (ver `docs/instalacion.md`).
 
-1. Conéctate al AP `Clawdgotchi-Setup` que expone el cubo
-2. Abre `http://192.168.4.1` en el navegador
-3. Configura red WiFi (SSID + contraseña)
-4. Reinicia y accede a `http://clawdgotchi.local` (o por IP)
-5. Portal de configuración (usuario del navegador siempre **`admin`**):
-   - Password de la web UI: configúrala y guárdala primero — es **obligatoria**
-     para poder iniciar sesión con Claude después.
-   - **Iniciar sesión con Claude (sin ordenador)** — la vía recomendada: pulsa
-     «Abrir login de Claude» desde el móvil, inicia sesión, copia el código que
-     te da Claude y pégalo en el cubo. El dispositivo hace el canje OAuth él
-     solo y guarda access + refresh token, así que se renueva para siempre sin
-     PC ni CLI.
-   - Alternativa manual: pega un token de `claude setup-token` en el formulario
-     de token.
+## Configuración
 
-Una vez recuperado, la verificación completa de hardware es la siguiente tarea.
+Al primer arranque el cubo abre un portal WiFi cautivo (`Clawdgotchi-Setup`).
+Después, en `http://clawdgotchi.local/` (o por IP), **usuario `admin`**:
+
+1. Pon una **contraseña** (obligatoria para iniciar sesión con Claude).
+2. **Inicia sesión con Claude** (recomendado, sin ordenador): pulsa «Abrir login
+   de Claude» desde el móvil, inicia sesión, copia el código que te da Claude y
+   pégalo. El cubo hace el canje OAuth y se renueva solo para siempre.
+   - *Alternativa manual:* pega un token de `claude setup-token`.
+3. Ajusta pantalla, brillo, rotación, fade, zona horaria y servidor NTP a gusto.
 
 ## Desarrollo
 
-### Compilación
+Requiere [PlatformIO](https://platformio.org/).
 
 ```sh
-# Build para el cubo (ESP8266 + pantalla 240×240)
-pio run -e ultra
+# Compilar (las credenciales WiFi van SOLO por build flags, nunca en el repo)
+PLATFORMIO_BUILD_FLAGS="-DCLAWD_WIFI_SSID='\"MiRed\"' -DCLAWD_WIFI_PASS='\"MiClave\"'" \
+  pio run -e ultra
 
-# Tests nativos (9 casos de prueba)
-pio test -e native
+# Tests de la lógica pura (parseo de cuotas, humor, countdowns, config)
+pio test -e native        # 9 tests
 
-# Generar sprites (desde spritesheet)
+# Regenerar los sprites de la mascota (Pillow)
 python3 tools/make_sprites.py
 
-# Actualización OTA (requiere acceso a http://clawdgotchi.local/update)
-tools/flash-ota.sh
-# Con password en web UI:
-CLAWD_WEB_AUTH=admin:contraseña tools/flash-ota.sh
+# Flashear por OTA a un cubo ya instalado
+CLAWD_WEB_AUTH=admin:clave tools/flash-ota.sh clawdgotchi.local
 ```
 
-### Credenciales WiFi
+La lógica testeable en host vive en `lib/core/` (C++ puro, sin Arduino); el
+resto en `src/`. Ver [`AGENTS.md`](AGENTS.md) para el mapa de módulos, las
+convenciones y las lecciones de hardware.
 
-**Nunca hardcodees credenciales en el repositorio.**
+## Arquitectura (resumen)
 
-Las credenciales se pasan solo por:
-- **Portal cautivo WiFi** (vía web UI en `192.168.4.1`) — la vía normal, sin
-  tocar el build.
-- **Build flags** (`PLATFORMIO_BUILD_FLAGS`) — **opcional**: un fallback de
-  un solo uso que se migra a `config.json` en el primer arranque y no vuelve
-  a usarse; solo hace falta si quieres saltarte el portal cautivo la primera
-  vez. Escapado exacto (los macros son `CLAWD_WIFI_SSID`/`CLAWD_WIFI_PASS`):
-  ```sh
-  PLATFORMIO_BUILD_FLAGS="-DCLAWD_WIFI_SSID='\"MiRed\"' -DCLAWD_WIFI_PASS='\"MiClave\"'" pio run -e ultra
-  ```
+| Módulo | Responsabilidad |
+|---|---|
+| `lib/core/quota` | Parseo de cabeceras de rate-limit, humor de la mascota, countdowns (testeable) |
+| `lib/core/config_codec` | Config y tokens ↔ JSON (testeable) |
+| `src/main.cpp` | Orquestador: estados de arranque, planificador de poll, rotación, modo seguro |
+| `src/claude_client` | Poll de cuota y refresh de token por TLS (BearSSL, CA pineada) |
+| `src/oauth_login.h` | Login OAuth PKCE en el dispositivo |
+| `src/webui.h` | Interfaz web + rutas de configuración |
+| `src/wifi_portal.h` | Portal cautivo de primer arranque |
+| `src/display / screen_tama / screen_clock` | Pantalla ST7789 y las dos vistas |
+| `src/sprites.h` | Sprites de la mascota (generados por `tools/make_sprites.py`) |
+| `src/safemode.h` | Contador de crashes anti-brickeo |
 
-### Pruebas
+## Seguridad
 
-```sh
-pio test -e native
-```
+- La web UI lleva contraseña (usuario `admin`); los **tokens nunca se muestran**
+  ni se exportan por la interfaz.
+- TLS con raíces de CA **pineadas** (`src/certs.h`), nunca `setInsecure`.
+- Las credenciales WiFi solo entran por build flags; **no hay secretos en el repo**.
 
-Corre 9 tests unitarios (sin hardware):
-- Parsing de cuotas desde headers HTTP
-- Cálculo de countdown (reset semanal)
-- Umbrales de humor (moodFor)
-- Configuración (lectura/escritura)
-- Y más.
+## Limitaciones honestas
 
-## Licencia
+- El flujo OAuth y las cabeceras de rate-limit de Claude Code **no son API
+  pública documentada** de Anthropic; funcionan hoy pero podrían cambiar.
+- El ESP8266 va justo de RAM: el handshake TLS usa un buffer de 8 KB (ver
+  `AGENTS.md`); sin MFLN no cabía más.
 
-MIT License (copyright 2026 Oskar).
+## Licencia y agradecimientos
 
-Ver [LICENSE](LICENSE) para el texto completo.
-
-### Agradecimientos
-
-Este proyecto usa como referencia:
-- [smalltv-mod](https://github.com/giovi321/smalltv-mod) v2.9.2 (loader OTA y hardware) — WTFPL
-- [clawdmeter-daemon](https://github.com/oskar-gmerek/clawdmeter-daemon) (endpoints de cuota) — WTFPL
-
-## Nota honesta
-
-El flujo de autenticación OAuth y las cabeceras de rate limit (`anthropic-ratelimit-*`) que este firmware usa **no son API pública documentada** de Anthropic. Pueden cambiar sin previo aviso. Si construyes sobre esto, mantén ojo a los cambios en `api.anthropic.com`.
+[MIT](LICENSE). Como referencia de hardware y de los endpoints se usaron
+[smalltv-mod](https://github.com/giovi321/smalltv-mod) y
+[clawdmeter-daemon](https://github.com/giovi321/clawdmeter-daemon) (WTFPL).
