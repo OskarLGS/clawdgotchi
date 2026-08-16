@@ -63,13 +63,20 @@ cada tarea está en `.superpowers/sdd/2026-08-16-clawdgotchi/progress.md`.
    compilación, cubo vivo tras cada flasheo, heap, log y un endpoint de
    debug que dice qué se está dibujando. Si los colores salen invertidos,
    el ajuste es un build flag (`TFT_INVERSION_ON`) y un flasheo OTA.
-9. **Password de la web UI**: (pendiente — se anota aquí cuando se fije en
-   la T9).
+9. **Password de la web UI**: el spec la exige para configurar OAuth y así
+   quedó implementado (guardar token responde 403 sin password). La eliges
+   tú en la web UI al estrenar el cubo — no hay ninguna por defecto.
 
-## Estado al escribir esto
+## Estado final
 
-- Tasks 1–6 completadas y revisadas (spike TLS PASADO en hardware:
-  code=200 con cuota real 5h=12 %, 7d=18 %).
-- Cubo flasheado y accesible en `clawdgotchi.local` (192.168.1.114).
-- Siguientes: T7 cliente Claude → T8 portal → T9 web UI → T10-13 pantalla
-  → T14 orquestador → T15 README → revisión final.
+- **Las 15 tareas del plan completadas**, cada una con revisión
+  independiente y ronda de fixes; revisión final de rama (modelo mayor)
+  con veredicto "mergeable" tras una ola de 16 correcciones, re-revisada
+  en limpio.
+- 9 tests nativos en verde; compila con y sin credenciales; sin secretos
+  en el repo (verificado en cada revisión y en el historial).
+- RAM estática final 41,5 KB (se recuperaron 7,4 KB unificando buffers);
+  flash 71 % con los 12 sprites incluidos.
+- **Pendiente solo**: recuperar el cubo por UART y pasar el checklist de
+  `docs/verificacion-hardware.md` (todo lo visual/físico en una tanda).
+- El PKCE en el cubo queda como mejora opcional (Task 16 del plan).
