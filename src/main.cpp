@@ -71,9 +71,16 @@ void loop() {
     if (loadTokens(t)) {
       time_t now = 0;
       for (int i = 0; i < 40 && (now = time(nullptr)) < 1600000000; i++) delay(250);
-      PollStatus st = pollQuota(t.access, quotaNow);
-      if (st == PollStatus::OK) lastPollOk = (uint32_t)time(nullptr);
-      LOGN("poll st=%d 5h=%u%% 7d=%u%%", (int)st, quotaNow.pct5h, quotaNow.pctWeek);
+      if (now < 1600000000) {
+        // NTP no sincronizo a tiempo: no pollear con reloj en epoca (rompe
+        // formatCountdown en pantalla). Reintenta en el siguiente ciclo.
+        pollPedido = true;
+        LOGN("poll aplazado: sin NTP");
+      } else {
+        PollStatus st = pollQuota(t.access, quotaNow);
+        if (st == PollStatus::OK) lastPollOk = (uint32_t)time(nullptr);
+        LOGN("poll st=%d 5h=%u%% 7d=%u%%", (int)st, quotaNow.pct5h, quotaNow.pctWeek);
+      }
     }
   }
   static uint32_t lastFrameMs = 0;

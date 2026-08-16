@@ -11,7 +11,7 @@ static const int MASCOT_CLEAR_Y = 16, MASCOT_CLEAR_H = 100;  // franja para el r
 static const int BAR_X = 20, BAR_W = 200, BAR_H = 18;
 static const int BAR_5H_Y = 140, BAR_WK_Y = 185;
 static const int LABEL_H = 16;                    // alto de font 2
-static const int ROW_CLEAR_W = 240 - BAR_X - 2;    // hasta el borde derecho
+static const int ROW_CLEAR_W = 240 - BAR_X;        // hasta el borde derecho (x=240)
 
 static bool s_force = true;
 
@@ -66,8 +66,12 @@ void drawTamagotchi(const QuotaSnapshot& q, Mood m, uint32_t nowEpoch, uint8_t f
   bool offline = (m == Mood::OFFLINE);
 
   // --- construye las líneas de etiqueta+countdown de hoy ---
+  // Guard NTP: si el reloj local aun no sincronizo (epoca ~1970), reset5h/
+  // resetWeek son epochs reales pero "nowEpoch" no lo es -> formatCountdown
+  // pintaria basura tipo "20000d Xh". Se trata igual que !q.valid.
+  bool ntpOk = nowEpoch >= 1600000000;
   char cd5h[24], cdWk[24];
-  if (q.valid) {
+  if (q.valid && ntpOk) {
     if (sleeping && q.pct5h >= 100) {
       char c[16]; formatCountdown(nowEpoch, q.reset5h, c, sizeof c);
       snprintf(cd5h, sizeof cd5h, "despierta en %s", c);
