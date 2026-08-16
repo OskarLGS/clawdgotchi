@@ -16,12 +16,16 @@ inline bool saveFile(const char* path, const char* data) {
   return true;
 }
 
-// ponytail: buffers `static` en vez de la pila del handler. En ESP8266 los
-// handlers de ESP8266WebServer corren en la pila "cont" (~4KB); Tokens (~2.6KB)
-// + char[3072] localmente en cada llamada desbordaba y reiniciaba el cubo.
-// Single-threaded (sin reentrada real: handleClient() procesa una request a
-// la vez), asi que static es seguro y es el fix minimo.
-inline bool loadConfig(Config& c)  { static char b[768];  return loadFile("/config.json", b, sizeof b) && configFromJson(b, c); }
-inline bool saveConfig(const Config& c) { static char b[768];  return configToJson(c, b, sizeof b) && saveFile("/config.json", b); }
-inline bool loadTokens(Tokens& t)  { static char b[3072]; return loadFile("/tokens.json", b, sizeof b) && tokensFromJson(b, t); }
-inline bool saveTokens(const Tokens& t) { static char b[3072]; return tokensToJson(t, b, sizeof b) && saveFile("/tokens.json", b); }
+// ponytail: buffer `static` en vez de la pila del handler. En ESP8266 los
+// handlers de ESP8266WebServer corren en la pila "cont" (~4KB); Tokens
+// (~2.6KB) + char[3072] localmente en cada llamada desbordaba y reiniciaba
+// el cubo. Las 4 funciones comparten UN UNICO buffer (en vez de uno cada
+// una) porque nunca se anidan: single-threaded (handleClient() procesa una
+// request a la vez) y ninguna llama a otra de este fichero. El tamaño es el
+// que exige Tokens (3072B; Config solo necesita 768B) — compartir ahorra
+// ~4.6KB de .bss frente a un buffer estatico por funcion.
+static char s_iobuf[3072];
+inline bool loadConfig(Config& c)  { return loadFile("/config.json", s_iobuf, sizeof s_iobuf) && configFromJson(s_iobuf, c); }
+inline bool saveConfig(const Config& c) { return configToJson(c, s_iobuf, sizeof s_iobuf) && saveFile("/config.json", s_iobuf); }
+inline bool loadTokens(Tokens& t)  { return loadFile("/tokens.json", s_iobuf, sizeof s_iobuf) && tokensFromJson(s_iobuf, t); }
+inline bool saveTokens(const Tokens& t) { return tokensToJson(t, s_iobuf, sizeof s_iobuf) && saveFile("/tokens.json", s_iobuf); }

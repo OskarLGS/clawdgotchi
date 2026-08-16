@@ -18,6 +18,11 @@ NetLog netlog;
 ESP8266WebServer server(80);
 QuotaSnapshot quotaNow;
 Config cfg;
+// Unico buffer de Tokens del firmware: runPoll() (aqui) y /token (webui.h)
+// lo comparten via extern en vez de tener cada uno su propio `static Tokens`
+// (~2.6KB cada uno); ambos lo recargan con loadTokens() antes de usarlo, asi
+// que no hay estado cruzado entre llamadas que compartir el buffer rompa.
+Tokens g_tokens;
 // No static: webui.h necesita ponerlo a true desde /token y /cfg (extern).
 bool pollPedido = false;
 static uint32_t lastPollOk = 0;
@@ -102,7 +107,7 @@ static void runPoll(uint32_t nowMs, bool ntpVisto) {
   }
   pollPedido = false;
 
-  static Tokens t;  // ponytail: fuera de la pila de loop(), ver store.h
+  Tokens& t = g_tokens;  // buffer compartido, ver declaracion arriba
   if (!loadTokens(t)) {
     LOGN("loadTokens fallo en loop");
     nextPollMs = nowMs + (uint32_t)cfg.pollMinutes * 60000UL;
@@ -146,8 +151,7 @@ void loop() {
   uint32_t nowMs = millis();
 
   // Una vez sincronizado NTP no hace falta volver a comprobarlo: evita el
-  // time(nullptr) redundante y sobre todo evita repetir la espera bloqueante
-  // de runPoll() en cada poll (solo ocurre mientras ntpVisto es false).
+  // time(nullptr) redundante en cada iteracion.
   static bool ntpVisto = false;
   if (!ntpVisto && time(nullptr) >= 1600000000) ntpVisto = true;
 

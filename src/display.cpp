@@ -2,7 +2,6 @@
 #include "board.h"
 
 TFT_eSPI tft;
-TFT_eSprite strip(&tft);
 
 void displayBegin(uint8_t pct) {
   pinMode(PIN_TFT_BL, OUTPUT);

@@ -6,19 +6,22 @@
 
 ## Mascota con cuota
 
+El humor lo decide la **peor** (más usada) de las dos cuotas de Claude Code
+que están en uso, la de 5h y la semanal — no la que queda libre:
+
 | Estado | Sprite |
 |--------|--------|
-| Feliz (cuota > 60%) | ![happy](assets/sprite_happy_0.png) |
-| Despierto (cuota 30-60%) | ![uneasy](assets/sprite_uneasy_0.png) |
-| Dormido (cuota < 30%) | ![sleeping](assets/sprite_sleeping_0.png) |
+| Contenta, <50% usada | ![happy](assets/sprite_happy_0.png) |
+| Inquieta, 50-74% usada | ![uneasy](assets/sprite_uneasy_0.png) |
+| Dormida, cuota agotada | ![sleeping](assets/sprite_sleeping_0.png) |
 
-La mascota tiene **6 humores** según la cuota restante de Claude Code:
-- **Feliz** (>60%): animación activa
-- **Despierto** (30-60%): alerta, movimiento moderado  
-- **Dormido** (<30%): animación lenta, bajo consumo
-- **Incómodo** (~10%): advertencia visual
-- **Estresado** (~5%): urgencia
-- **Pánico** (0%): reset semanal — barras de countdown
+La mascota tiene **6 humores**, calculados en `moodFor()` (`lib/core/quota.cpp`):
+- **Contenta** (happy, <50% usada): animación normal
+- **Inquieta** (uneasy, 50-74% usada)
+- **Agobiada** (stressed, 75-89% usada)
+- **Pánico** (panic, ≥90% usada)
+- **Dormida** (sleeping, cuota agotada — `status=rejected` o 100% usada): countdown de cuándo despierta
+- **Desconectada** (offline, sprite gris): sin datos válidos o sin WiFi
 
 ## Características
 
@@ -31,21 +34,26 @@ La mascota tiene **6 humores** según la cuota restante de Claude Code:
   - Certs pineados: GTS Root R4 para `api.anthropic.com`, ISRG Root YE para `platform.claude.com`
   - Buffers: RX=16KB, TX=512B (MFLN rechazado por el servidor)
 - **Memoria mínima**: heap máximo 35KB antes del handshake, margen suficiente
+- Durante la consulta TLS (~5 s cada pocos minutos) la animación se congela brevemente
 
 ## Instalación
 
-Para la **primera instalación**, necesitas un cable UART y esptool (ver [docs/instalacion.md](docs/instalacion.md)).
+La **primera instalación NO requiere abrir la caja ni cable UART**: se hace
+en dos pasos por `/update` (loader + firmware), ver
+[docs/instalacion.md](docs/instalacion.md). El UART es el plan B, solo para
+recuperación si el cubo se queda sin red.
 
 A partir de la segunda instalación, todo se hace por OTA.
 
 ### Configuración rápida
 
-1. Conéctate al AP `SmallTV-Clawdgotchi` que expone el cubo
+1. Conéctate al AP `Clawdgotchi-Setup` que expone el cubo
 2. Abre `http://192.168.4.1` en el navegador
 3. Configura red WiFi (SSID + contraseña)
 4. Reinicia y accede a `http://clawdgotchi.local` (o por IP)
 5. Portal de configuración:
-   - Password (opcional, para la web UI)
+   - Password de la web UI: configúrala y guárdala primero — es **obligatoria**
+     para poder guardar el token después (`/token` responde 403 sin ella)
    - Token de Claude Code: usa `claude setup-token` en la CLI de Claude Code y pega el token
 
 ## ⚠️ ADVERTENCIA: Estado actual
@@ -59,7 +67,7 @@ Una vez recuperado, la verificación completa de hardware es la siguiente tarea.
 ### Compilación
 
 ```sh
-# Build para el cubo (ESP8266 + pantalla 160×128)
+# Build para el cubo (ESP8266 + pantalla 240×240)
 pio run -e ultra
 
 # Tests nativos (9 casos de prueba)
@@ -76,14 +84,17 @@ CLAWD_WEB_AUTH=admin:contraseña tools/flash-ota.sh
 
 ### Credenciales WiFi
 
-**Nunca hardcodees credenciales en el repositorio.** 
+**Nunca hardcodees credenciales en el repositorio.**
 
 Las credenciales se pasan solo por:
-- **Portal WiFi** (vía web UI en `192.168.4.1`)
-- **Build flags** (variable de entorno `PLATFORMIO_BUILD_FLAGS`):
+- **Portal cautivo WiFi** (vía web UI en `192.168.4.1`) — la vía normal, sin
+  tocar el build.
+- **Build flags** (`PLATFORMIO_BUILD_FLAGS`) — **opcional**: un fallback de
+  un solo uso que se migra a `config.json` en el primer arranque y no vuelve
+  a usarse; solo hace falta si quieres saltarte el portal cautivo la primera
+  vez. Escapado exacto (los macros son `CLAWD_WIFI_SSID`/`CLAWD_WIFI_PASS`):
   ```sh
-  export PLATFORMIO_BUILD_FLAGS="-D WIFI_SSID=MySSID -D WIFI_PASS=MyPassword"
-  pio run -e ultra
+  PLATFORMIO_BUILD_FLAGS="-DCLAWD_WIFI_SSID='\"MiRed\"' -DCLAWD_WIFI_PASS='\"MiClave\"'" pio run -e ultra
   ```
 
 ### Pruebas
@@ -95,7 +106,7 @@ pio test -e native
 Corre 9 tests unitarios (sin hardware):
 - Parsing de cuotas desde headers HTTP
 - Cálculo de countdown (reset semanal)
-- Selección de sprite según cuota
+- Umbrales de humor (moodFor)
 - Configuración (lectura/escritura)
 - Y más.
 

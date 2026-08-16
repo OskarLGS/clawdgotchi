@@ -11,6 +11,8 @@
 extern bool safeMode;
 extern bool authBad;
 extern bool pollPedido;
+// Buffer de Tokens compartido con runPoll() en main.cpp, ver su declaracion.
+extern Tokens g_tokens;
 
 static const char SETTINGS_HTML[] PROGMEM = R"(<!doctype html><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
@@ -106,7 +108,7 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
   s.on("/token", HTTP_POST, [&] {
     if (!webAuth(s, cfg)) return;
     if (!cfg.webPass[0]) { s.send(403, "text/plain", "configura primero una contrase\xc3\xb1a"); return; }
-    static Tokens t;  // ponytail: fuera de la pila del handler, ver store.h
+    Tokens& t = g_tokens;  // buffer compartido, ver declaracion en main.cpp
     loadTokens(t);
     if (s.arg("access").length())  snprintf(t.access, sizeof t.access, "%s", s.arg("access").c_str());
     if (s.arg("refresh").length()) snprintf(t.refresh, sizeof t.refresh, "%s", s.arg("refresh").c_str());

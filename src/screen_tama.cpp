@@ -8,7 +8,7 @@
 // Layout (fijado en el brief de la task 12, no tocar sin actualizar el brief).
 static const int MASCOT_X = 72, MASCOT_Y = 18, MASCOT_SIZE = 96;
 static const int MASCOT_CLEAR_Y = 16, MASCOT_CLEAR_H = 100;  // franja para el rebote ±2px
-static const int BAR_X = 20, BAR_W = 200, BAR_H = 18;
+static const int BAR_X = 20, BAR_W = 160, BAR_H = 18;
 static const int BAR_5H_Y = 140, BAR_WK_Y = 185;
 static const int LABEL_H = 16;                    // alto de font 2
 static const int ROW_CLEAR_W = 240 - BAR_X;        // hasta el borde derecho (x=240)
@@ -72,14 +72,14 @@ void drawTamagotchi(const QuotaSnapshot& q, Mood m, uint32_t nowEpoch, uint8_t f
   bool ntpOk = nowEpoch >= 1600000000;
   char cd5h[24], cdWk[24];
   if (q.valid && ntpOk) {
-    if (sleeping && q.pct5h >= 100) {
+    if (sleeping) {
       char c[16]; formatCountdown(nowEpoch, q.reset5h, c, sizeof c);
       snprintf(cd5h, sizeof cd5h, "despierta en %s", c);
     } else {
       char c[16]; formatCountdown(nowEpoch, q.reset5h, c, sizeof c);
       snprintf(cd5h, sizeof cd5h, "5h  %s", c);
     }
-    if (sleeping && q.pctWeek >= 100) {
+    if (sleeping) {
       char c[16]; formatCountdown(nowEpoch, q.resetWeek, c, sizeof c);
       snprintf(cdWk, sizeof cdWk, "despierta en %s", c);
     } else {
