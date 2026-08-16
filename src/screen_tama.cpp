@@ -14,8 +14,8 @@ static const int MASCOT_CLEAR_Y = 16, MASCOT_CLEAR_H = 100;  // franja para el r
 static const int MARGIN_X = 10;
 static const int BAR_W = 240 - 2 * MARGIN_X;      // 220: barra a lo ancho
 static const int BAR_H = 14;
-static const int BLOCK1_Y = 126, BLOCK2_Y = 182;  // top de cada bloque
-static const int LABEL_BASE = 16;                 // baseline de la etiqueta (rel. al top)
+static const int BLOCK1_Y = 132, BLOCK2_Y = 182;  // top de cada bloque (menos hueco entre barras)
+static const int LABEL_BASE = 17;                 // baseline de la etiqueta (rel. al top)
 static const int BAR_TOP = 22;                    // top de la barra (rel. al top)
 static const int BLOCK_H = 38;                    // alto a limpiar por bloque
 
@@ -110,10 +110,9 @@ void drawTamagotchi(const QuotaSnapshot& q, Mood m, uint32_t nowEpoch, uint8_t f
                  strcmp(s_last.line5h, cd5h) != 0 || strcmp(s_last.lineWk, cdWk) != 0;
 
   if (changed) {
-    drawBar(BLOCK1_Y, cd5h, q.pct5h, q.valid);
-    drawBar(BLOCK2_Y, cdWk, q.pctWeek, q.valid);
-
-    // texto "sin conexión" bajo la mascota, en la franja libre encima del bloque 1
+    // Limpia el hueco entre la mascota y el bloque 1 ANTES de las barras: si se
+    // hace despues, este fillRect repinta de negro las astas altas de la
+    // etiqueta "5h" (que suben por encima del top del bloque) -> texto cortado.
     tft.fillRect(0, MASCOT_CLEAR_Y + MASCOT_CLEAR_H, 240, BLOCK1_Y - (MASCOT_CLEAR_Y + MASCOT_CLEAR_H), TFT_BLACK);
     if (offline) {
       tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
@@ -121,6 +120,9 @@ void drawTamagotchi(const QuotaSnapshot& q, Mood m, uint32_t nowEpoch, uint8_t f
       tft.drawString("sin conexion", 120, MASCOT_CLEAR_Y + MASCOT_CLEAR_H, 1);
       tft.setTextDatum(TL_DATUM);
     }
+
+    drawBar(BLOCK1_Y, cd5h, q.pct5h, q.valid);
+    drawBar(BLOCK2_Y, cdWk, q.pctWeek, q.valid);
 
     s_last.valid = true;
     s_last.mood = m;
