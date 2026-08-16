@@ -6,6 +6,7 @@ struct Config {
   char wifiSsid[33] = "";
   char wifiPass[65] = "";
   char tz[48] = "CET-1CEST,M3.5.0,M10.5.0/3";   // POSIX TZ, por defecto España peninsular
+  char ntp[48] = "pool.ntp.org";                 // servidor NTP
   uint16_t pollMinutes = 5;
   uint8_t brightness = 80;                       // 0..100
   uint8_t screenMode = 0;                        // 0=rotación 1=tamagotchi 2=reloj

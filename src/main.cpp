@@ -65,7 +65,7 @@ void setup() {
   wifiConnectOrPortal(cfg);
   displayBegin(cfg.brightness);
   MDNS.begin("clawdgotchi");
-  configTime(cfg.tz, "pool.ntp.org");  // POSIX TZ de config; la validacion de certs necesita hora
+  configTime(cfg.tz, cfg.ntp);  // POSIX TZ + servidor NTP de config; la validacion de certs necesita hora
   webuiRoutes(server, cfg, quotaNow);
   server.on("/log", [] {
     if (!webAuth(server, cfg)) return;

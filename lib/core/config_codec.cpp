@@ -12,6 +12,7 @@ bool configFromJson(const char* json, Config& out) {
   if (d["ssid"].is<const char*>()) cp(out.wifiSsid, sizeof out.wifiSsid, d["ssid"]);
   if (d["pass"].is<const char*>()) cp(out.wifiPass, sizeof out.wifiPass, d["pass"]);
   if (d["tz"].is<const char*>())   cp(out.tz, sizeof out.tz, d["tz"]);
+  if (d["ntp"].is<const char*>())  cp(out.ntp, sizeof out.ntp, d["ntp"]);
   out.pollMinutes  = d["poll"] | out.pollMinutes;
   out.brightness   = d["brt"]  | out.brightness;
   out.screenMode   = d["mode"] | out.screenMode;
@@ -26,6 +27,7 @@ bool configToJson(const Config& c, char* out, size_t n) {
   d["ssid"] = c.wifiSsid;
   d["pass"] = c.wifiPass;
   d["tz"] = c.tz;
+  d["ntp"] = c.ntp;
   d["poll"] = c.pollMinutes;
   d["brt"] = c.brightness;
   d["mode"] = c.screenMode;

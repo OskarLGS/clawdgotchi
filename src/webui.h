@@ -65,6 +65,7 @@ details{margin-top:14px}details summary{cursor:pointer;color:var(--muted);font-s
 <label>Transici&oacute;n / fade: <span id=fv>%FADE%</span> ms</label><input type=range name=fade min=0 max=1000 step=50 value=%FADE% oninput="fv.textContent=this.value">
 <label>Brillo: <span id=bv>%BRT%</span>%</label><input type=range name=brt min=5 max=100 value=%BRT% oninput="bv.textContent=this.value">
 <label>Zona horaria (POSIX)</label><input name=tz value="%TZ%">
+<label>Servidor NTP</label><input name=ntp value="%NTP%">
 <label>Contrase&ntilde;a web &mdash; usuario: admin</label><input name=webpass value="%WP%">
 <div class=muted>Reinicia el cubo para aplicar la contrase&ntilde;a tambi&eacute;n a /update.</div>
 <button>Guardar ajustes</button>
@@ -137,6 +138,7 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
     // como que un valor con "%XX%" dentro reescriba otro placeholder ya
     // sustituido por los .replace() de arriba (htmlEscape tambien escapa %).
     p.replace("%TZ%", htmlEscape(cfg.tz));
+    p.replace("%NTP%", htmlEscape(cfg.ntp));
     p.replace("%WP%", htmlEscape(cfg.webPass));
     s.sendHeader("Cache-Control", "no-store");  // muestra siempre los valores recien guardados
     s.send(200, "text/html", p);
@@ -148,10 +150,11 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
     cfg.brightness = constrain(s.arg("brt").toInt(), 5, 100);
     cfg.fadeMs = constrain(s.arg("fade").toInt(), 0, 2000);
     snprintf(cfg.tz, sizeof cfg.tz, "%s", s.arg("tz").c_str());
+    if (s.arg("ntp").length()) snprintf(cfg.ntp, sizeof cfg.ntp, "%s", s.arg("ntp").c_str());
     cfg.pollMinutes = constrain(s.arg("poll").toInt(), 1, 1440);
     snprintf(cfg.webPass, sizeof cfg.webPass, "%s", s.arg("webpass").c_str());
     saveConfig(cfg);
-    setTZ(cfg.tz);  // aplicar TZ inmediatamente sin necesidad de reiniciar
+    configTime(cfg.tz, cfg.ntp);  // aplica TZ y servidor NTP en vivo (re-sincroniza)
     displayBrightness(cfg.brightness);
     // pollMinutes puede haber cambiado: nextPollMs (planificador de
     // main.cpp) es un static local a runPoll(), no expuesto aqui. En vez de
