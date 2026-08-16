@@ -8,6 +8,7 @@
 #include "store.h"
 #include "wifi_portal.h"
 #include "claude_client.h"
+#include "webui.h"
 
 NetLog netlog;
 ESP8266WebServer server(80);
@@ -22,34 +23,26 @@ void setup() {
   wifiConnectOrPortal(cfg);
   MDNS.begin("clawdgotchi");
   configTime(0, 0, "pool.ntp.org");  // la validacion de certs necesita hora
-  server.on("/", [] {
-    server.send(200, "text/plain",
-      "clawdgotchi\nheap=" + String(ESP.getFreeHeap()) +
-      " maxblock=" + String(ESP.getMaxFreeBlockSize()) +
-      "\nuptime=" + String(millis() / 1000) + "s\n");
-  });
-  server.on("/log", [] { server.send(200, "text/plain", netlog.text()); });
-  server.on("/token", HTTP_POST, [] {
-    static Tokens t;  // ponytail: fuera de la pila del handler, ver store.h
-    loadTokens(t);  // conserva lo que ya hubiera si solo llega uno de los dos args
-    if (server.arg("access").length()) snprintf(t.access, sizeof t.access, "%s", server.arg("access").c_str());
-    if (server.arg("refresh").length()) snprintf(t.refresh, sizeof t.refresh, "%s", server.arg("refresh").c_str());
-    saveTokens(t);
-    server.send(200, "text/plain", "guardado");
+  webuiRoutes(server, cfg, quotaNow);
+  server.on("/log", [] {
+    if (!webAuth(server, cfg)) return;
+    server.send(200, "text/plain", netlog.text());
   });
   // El TLS del poll ya NO corre dentro del handler HTTP (crasheaba la pila
   // "cont" del WebServer): esta ruta solo pide el poll, loop() lo ejecuta.
   server.on("/poll", [] {
+    if (!webAuth(server, cfg)) return;
     if (!LittleFS.exists("/tokens.json")) { server.send(400, "text/plain", "sin token guardado"); return; }
     pollPedido = true;
     server.send(200, "text/plain", "poll programado; mira /status");
   });
   server.on("/status", [] {
+    if (!webAuth(server, cfg)) return;
     server.send(200, "text/plain", String("valid=") + quotaNow.valid + " 5h=" + quotaNow.pct5h +
                 "% 7d=" + quotaNow.pctWeek + "% exhausted=" + quotaNow.exhausted +
                 " lastPollOk=" + lastPollOk);
   });
-  otaBegin(server);
+  otaBegin(server, cfg);
   server.begin();
   MDNS.addService("http", "tcp", 80);
 }
