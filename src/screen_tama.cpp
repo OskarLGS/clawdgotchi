@@ -70,10 +70,17 @@ static PaintedState s_last;
 
 void drawTamagotchi(const QuotaSnapshot& q, Mood m, uint32_t nowEpoch, uint8_t frame) {
   // --- mascota: siempre se repinta (anima cada llamada) ---
+  // Antiparpadeo: se dibuja OPACA (su fondo 0x0000 es negro, igual que la
+  // pantalla) para que sobrescriba el frame anterior en una sola pasada, sin el
+  // borrado-a-negro previo que causaba el parpadeo. Solo se limpia la franja de
+  // ~2px que el rebote deja fuera del sprite (arriba o abajo).
   int8_t bounce = (frame & 1) ? -2 : 2;
-  tft.fillRect(MASCOT_X, MASCOT_CLEAR_Y, MASCOT_SIZE, MASCOT_CLEAR_H, TFT_BLACK);
+  int my = MASCOT_Y + bounce;
+  int clrTop = MASCOT_CLEAR_Y, clrBot = MASCOT_CLEAR_Y + MASCOT_CLEAR_H;
+  if (my > clrTop) tft.fillRect(MASCOT_X, clrTop, MASCOT_SIZE, my - clrTop, TFT_BLACK);
+  if (my + MASCOT_SIZE < clrBot) tft.fillRect(MASCOT_X, my + MASCOT_SIZE, MASCOT_SIZE, clrBot - (my + MASCOT_SIZE), TFT_BLACK);
   tft.setSwapBytes(true);
-  tft.pushImage(MASCOT_X, MASCOT_Y + bounce, MASCOT_SIZE, MASCOT_SIZE, mascotFrame(m, frame), 0x0000);
+  tft.pushImage(MASCOT_X, my, MASCOT_SIZE, MASCOT_SIZE, mascotFrame(m, frame));
   tft.setSwapBytes(false);
 
   bool sleeping = (m == Mood::SLEEPING);
