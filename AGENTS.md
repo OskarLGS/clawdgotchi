@@ -70,6 +70,11 @@ CLAWD_WEB_AUTH=admin:<clave> tools/flash-ota.sh <ip-o-host>
 - `sprites.h` es **generado**: edita `tools/make_sprites.py` y regenera, no el
   header.
 - Textos de la interfaz y comentarios en español.
+- **Fuentes de pantalla:** `LOAD_GFXFF` habilita las GFX Free Fonts de TFT_eSPI
+  (Sans/Serif/Mono, 9-24 pt, regular/bold/oblique). En uso: `FreeMono9pt7b`
+  (etiquetas de las barras), `FreeSansBold24pt7b` escalada ×2 (reloj). El linker
+  solo enlaza las que referencias. Tras dibujar con `setFreeFont`, restaura con
+  `setTextFont(2)` (y `setTextSize(1)` si escalaste) para no afectar al resto.
 
 ## Lecciones de hardware (no repetir estos errores)
 

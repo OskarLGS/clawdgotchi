@@ -22,10 +22,10 @@ demonio de por medio.
   contenta (<50 %), inquieta (50-74 %), agobiada (75-89 %), pánico (≥90 %),
   dormida (cuota agotada, con cuenta atrás hasta el reset) y desconectada (sin
   datos/WiFi). Debajo, dos barras coloreadas por nivel con la etiqueta y el
-  countdown: `5h (2h 57m)` … `19%`.
-- **Reloj** NTP con hora grande sans-serif (FreeSans Bold), zona horaria
-  configurable y **desplazamiento antiquemado** (la hora orbita unos píxeles
-  cada minuto).
+  countdown en tipografía monoespaciada (FreeMono): `5h (2h 57m)` … `19%`.
+- **Reloj** NTP con la hora en grande (FreeSans Bold, escalada para ocupar el
+  ancho de la pantalla), zona horaria configurable y **desplazamiento
+  antiquemado** (la hora orbita unos píxeles cada minuto).
 - **Rotación** automática entre tamagotchi y reloj, con **transición de fundido**
   (fade) de duración ajustable.
 - **Autónomo de verdad.** El cubo obtiene el token de Claude **en el propio
