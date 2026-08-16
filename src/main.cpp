@@ -152,7 +152,17 @@ static void runPoll(uint32_t nowMs, bool ntpVisto) {
 void loop() {
   server.handleClient();
   MDNS.update();
-  if (safeMode) return;
+  if (safeMode) {
+    // Auto-recuperacion: el modo seguro sirve web UI + /update. Tras 30s
+    // estable (tiempo de sobra para un OTA), limpia el contador de crashes y
+    // reintenta modo normal. Si el firmware sigue roto, vuelve a modo seguro
+    // (otros 30s de ventana); si el OTA trajo un firmware bueno, arranca bien.
+    // Evita tener que desenchufar fisicamente para salir de modo seguro.
+    static uint32_t safeSince = 0;
+    if (!safeSince) safeSince = millis();
+    if (millis() - safeSince > 30000) { markBootHealthy(); ESP.restart(); }
+    return;
+  }
 
   uint32_t nowMs = millis();
 

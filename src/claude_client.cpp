@@ -5,9 +5,14 @@
 #include "certs.h"
 #include "netlog.h"
 
-// Spike (Task 5) midio MFLN 1024 RECHAZADO por el servidor (mfln1024=0),
-// asi que usamos los buffers grandes que si funcionaron: {16384, 512}.
-static const int RX_BUF = 16384, TX_BUF = 512;
+// El handshake TLS consume heap proporcional al buffer RX. Con 16384 el
+// consumo (~22KB, medido en el spike) NO cabe de forma fiable en este chip
+// (pantalla+sprites dejan ~19-20KB contiguos) y el poll crasheaba a veces al
+// arrancar. Con 8192 el consumo baja a ~11-12KB y cabe con margen. Requiere
+// que los registros TLS del servidor quepan en 8KB (la respuesta es diminuta y
+// las cadenas de certificados de api.anthropic.com / platform.claude.com
+// caben). Sin MFLN (el servidor lo rechaza), 8192 es el minimo seguro.
+static const int RX_BUF = 8192, TX_BUF = 512;
 
 static void tlsClient(BearSSL::WiFiClientSecure& c, BearSSL::X509List& roots) {
   c.setTrustAnchors(&roots);
@@ -19,8 +24,9 @@ static void tlsClient(BearSSL::WiFiClientSecure& c, BearSSL::X509List& roots) {
 // Mejor abortar limpiamente y reintentar en el siguiente ciclo. 20KB deja margen
 // sobre los ~16-18KB medidos como minimo del handshake.
 bool tlsHeapOk(const char* who) {
+  // Con buffer RX de 8192 el handshake necesita ~11-12KB; 13000 deja margen.
   uint32_t blk = ESP.getMaxFreeBlockSize();
-  if (blk >= 20000) return true;
+  if (blk >= 13000) return true;
   LOGN("%s: heap bajo (%u), salto TLS", who, blk);
   return false;
 }

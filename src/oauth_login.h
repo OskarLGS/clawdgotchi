@@ -112,12 +112,23 @@ inline bool oauthExchange(const String& codeInput, Tokens& out) {
   BearSSL::WiFiClientSecure client;
   BearSSL::X509List roots(CA_ROOTS);
   client.setTrustAnchors(&roots);
-  client.setBufferSizes(16384, 512);
+  // platform.claude.com no soporta MFLN (probado), asi que no se puede pedir
+  // fragmentos pequenos. Pero el consumo de heap del handshake escala con el
+  // buffer RX: con 16384 el spike consumio ~22KB y en este chip (pantalla+
+  // sprites) solo hay ~19KB contiguos -> fallaba (ssl -1000). Con RX 8192 el
+  // handshake consume ~14KB y cabe. Requiere que los registros TLS del
+  // servidor quepan en 8KB (lo habitual). El poll (api.anthropic.com) sigue en
+  // 16384 porque ese si funciona y ahi la cadena es distinta.
+  client.setBufferSizes(8192, 512);
+  LOGN("oauth blk=%u", ESP.getMaxFreeBlockSize());
   HTTPClient http;
   http.begin(client, "https://platform.claude.com/v1/oauth/token");
   http.addHeader("Content-Type", "application/json");
   int code_ = http.POST(body);
-  if (code_ != 200) { LOGN("oauth exchange code=%d", code_); http.end(); return false; }
+  if (code_ != 200) {
+    LOGN("oauth exchange code=%d ssl=%d", code_, client.getLastSSLError());
+    http.end(); return false;
+  }
 
   JsonDocument d;
   DeserializationError e = deserializeJson(d, http.getStream());
