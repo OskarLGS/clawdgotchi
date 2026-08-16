@@ -9,6 +9,7 @@
 #include "wifi_portal.h"
 #include "claude_client.h"
 #include "webui.h"
+#include "oauth_login.h"
 #include "display.h"
 #include "screen_tama.h"
 #include "screen_clock.h"
@@ -33,6 +34,11 @@ bool safeMode = false;
 // arregla. Se limpia con un poll OK o al guardar un token nuevo en /token
 // (webui.h). Leido tambien por webui.h (extern) para avisar en la web UI.
 bool authBad = false;
+// Login OAuth (Task 16): /oauth/finish (webui.h) solo guarda el codigo
+// pegado aqui y levanta oauthPending; el canje TLS (oauthExchange) corre en
+// loop(), nunca dentro del handler HTTP.
+bool oauthPending = false;
+String g_pendingCode;
 
 void setup() {
   // Primera linea, antes de tocar LittleFS: un FS corrupto que haga crashear
@@ -156,6 +162,23 @@ void loop() {
   if (!ntpVisto && time(nullptr) >= 1600000000) ntpVisto = true;
 
   runPoll(nowMs, ntpVisto);
+
+  // Canje TLS del login OAuth (Task 16), fuera del handler HTTP. Se aplaza
+  // (igual que runPoll) hasta que NTP sincronice: sin hora real el TLS ni
+  // siquiera validaria los certificados.
+  if (oauthPending && ntpVisto) {
+    oauthPending = false;
+    static Tokens tmp;  // static: ~2.6KB, no cabe en la pila de loop()
+    if (oauthExchange(g_pendingCode, tmp)) {
+      g_tokens = tmp;
+      saveTokens(g_tokens);
+      authBad = false;
+      pollPedido = true;
+      LOGN("oauth ok");
+    } else {
+      LOGN("oauth fallo");
+    }
+  }
 
   static bool healthMarked = false;
   if (!healthMarked && millis() > 60000) { markBootHealthy(); healthMarked = true; }

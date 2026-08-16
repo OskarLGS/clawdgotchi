@@ -5,6 +5,7 @@
 #include "quota.h"
 #include "htmlutil.h"
 #include "display.h"
+#include "oauth_login.h"
 
 // Definidas en main.cpp; el orquestador (task 14) es quien conoce el estado
 // real de arranque y de autenticacion con Claude.
@@ -13,6 +14,11 @@ extern bool authBad;
 extern bool pollPedido;
 // Buffer de Tokens compartido con runPoll() en main.cpp, ver su declaracion.
 extern Tokens g_tokens;
+// Login OAuth (Task 16): /oauth/finish (aqui) solo guarda el codigo pegado y
+// levanta el flag; el canje TLS lo hace loop() en main.cpp (nunca TLS dentro
+// de un handler HTTP, ver oauth_login.h).
+extern bool oauthPending;
+extern String g_pendingCode;
 
 static const char SETTINGS_HTML[] PROGMEM = R"(<!doctype html><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
@@ -37,8 +43,15 @@ Password web UI: <input name=webpass value="%WP%"><br>
 <small>Tras cambiarla, reinicia el cubo para que se aplique tambi&eacute;n a /update.</small><br><br>
 <input type=submit value=Guardar>
 </form>
+<h3>Iniciar sesi&oacute;n con Claude (sin ordenador)</h3>
+%OAUTHMSG%
+<p>1. <a href=/oauth/start target=_blank %OAUTHDIS%>Abrir login de Claude</a> desde el m&oacute;vil, inicia sesi&oacute;n y copia el c&oacute;digo que te da.</p>
+<form method=POST action=/oauth/finish>
+2. Pega aqu&iacute; el c&oacute;digo: <input name=code size=40 %OAUTHDIS%><br><br>
+<input type=submit value="Guardar" %OAUTHDIS%>
+</form>
 <form method=POST action=/token>
-<h3>Token de Claude</h3>
+<h3>Token de Claude (alternativa manual)</h3>
 %TOKMSG%
 <p>En tu ordenador: <code>claude setup-token</code> y pega aqu&iacute; el resultado.
 O pega un refresh token para renovaci&oacute;n autom&aacute;tica.</p>
@@ -73,9 +86,14 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
       p.replace("%TOKMSG%", authBad ?
         "<p style=color:#f88>Token invalido o caducado sin refresh posible. Pega uno nuevo abajo.</p>" : "");
       p.replace("%TOKDIS%", "");
+      p.replace("%OAUTHMSG%", oauthPending ?
+        "<p style=color:#8cf>Procesando login&hellip; recarga esta p&aacute;gina en unos segundos.</p>" : "");
+      p.replace("%OAUTHDIS%", "");
     } else {
       p.replace("%TOKMSG%", "<p style=color:#f88>Configura primero una contrase&ntilde;a arriba y guarda para poder guardar el token.</p>");
       p.replace("%TOKDIS%", "disabled");
+      p.replace("%OAUTHMSG%", "<p style=color:#f88>Configura primero una contrase&ntilde;a arriba y guarda para poder iniciar sesi&oacute;n.</p>");
+      p.replace("%OAUTHDIS%", "disabled");
     }
     // Texto libre de usuario al final y escapado: evita tanto XSS (< > " &)
     // como que un valor con "%XX%" dentro reescriba otro placeholder ya
@@ -102,6 +120,31 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
     // nuevo. Efecto secundario asumido: cualquier guardado en /cfg (aunque
     // solo cambie brillo o TZ) adelanta el proximo poll.
     pollPedido = true;
+    s.sendHeader("Location", "/");
+    s.send(303);
+  });
+  s.on("/oauth/start", [&] {
+    if (!webAuth(s, cfg)) return;
+    if (!cfg.webPass[0]) { s.send(403, "text/plain", "configura primero una contrase\xc3\xb1a"); return; }
+    String url = oauthBuildUrl();
+    url.replace("&", "&amp;");  // valido dentro de un atributo href
+    String p = "<!doctype html><meta charset=utf-8>"
+      "<meta name=viewport content=\"width=device-width,initial-scale=1\">"
+      "<title>Clawdgotchi</title>"
+      "<body style=\"font-family:sans-serif;background:#222;color:#eee;max-width:34em;margin:2em auto\">"
+      "<h2>Iniciar sesi\xc3\xb3n con Claude</h2>"
+      "<p>Toca el enlace, inicia sesi\xc3\xb3n en Claude y autoriza el acceso. "
+      "Al final Claude te muestra un c\xc3\xb3digo: c\xc3\xb3pialo entero y vuelve a la p\xc3\xa1gina "
+      "anterior para pegarlo.</p>"
+      "<p><a href=\"" + url + "\" target=_blank style=\"font-size:1.3em\">Abrir login de Claude &rarr;</a></p>"
+      "<p><a href=/ style=color:#8cf>&larr; volver</a></p>";
+    s.send(200, "text/html", p);
+  });
+  s.on("/oauth/finish", HTTP_POST, [&] {
+    if (!webAuth(s, cfg)) return;
+    if (!cfg.webPass[0]) { s.send(403, "text/plain", "configura primero una contrase\xc3\xb1a"); return; }
+    g_pendingCode = s.arg("code");
+    oauthPending = true;
     s.sendHeader("Location", "/");
     s.send(303);
   });
