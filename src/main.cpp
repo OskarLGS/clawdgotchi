@@ -10,6 +10,7 @@
 #include "claude_client.h"
 #include "webui.h"
 #include "display.h"
+#include "screen_tama.h"
 
 NetLog netlog;
 ESP8266WebServer server(80);
@@ -17,14 +18,15 @@ QuotaSnapshot quotaNow;
 Config cfg;
 static bool pollPedido = false;
 static uint32_t lastPollOk = 0;
+// -1 = sin forzar (humor real); 0..5 = índice de Mood forzado por /demo.
+// Ruta de debug temporal para probar los 6 humores en pantalla; T14 la retira.
+static int demoMood = -1;
 
 void setup() {
   LittleFS.begin();
   loadConfig(cfg);
   wifiConnectOrPortal(cfg);
   displayBegin(cfg.brightness);
-  tft.setTextColor(TFT_ORANGE);
-  tft.drawString("clawdgotchi", 60, 110, 4);
   MDNS.begin("clawdgotchi");
   configTime(0, 0, "pool.ntp.org");  // la validacion de certs necesita hora
   webuiRoutes(server, cfg, quotaNow);
@@ -46,6 +48,15 @@ void setup() {
                 "% 7d=" + quotaNow.pctWeek + "% exhausted=" + quotaNow.exhausted +
                 " lastPollOk=" + lastPollOk);
   });
+  // Debug temporal (task 12): fuerza uno de los 6 humores en pantalla.
+  // GET /demo?mood=0..5 (HAPPY..OFFLINE); sin arg o fuera de rango = normal.
+  // Se retira en la task 14.
+  server.on("/demo", [] {
+    if (!webAuth(server, cfg)) return;
+    int v = server.hasArg("mood") ? server.arg("mood").toInt() : -1;
+    demoMood = (v >= 0 && v <= 5) ? v : -1;
+    server.send(200, "text/plain", String("demoMood=") + demoMood);
+  });
   otaBegin(server, cfg);
   server.begin();
   MDNS.addService("http", "tcp", 80);
@@ -64,6 +75,16 @@ void loop() {
       if (st == PollStatus::OK) lastPollOk = (uint32_t)time(nullptr);
       LOGN("poll st=%d 5h=%u%% 7d=%u%%", (int)st, quotaNow.pct5h, quotaNow.pctWeek);
     }
+  }
+  static uint32_t lastFrameMs = 0;
+  static uint8_t frame = 0;
+  uint32_t nowMs = millis();
+  if (nowMs - lastFrameMs >= 500) {
+    lastFrameMs = nowMs;
+    frame ^= 1;
+    Mood m = moodFor(quotaNow, WiFi.status() == WL_CONNECTED);
+    if (demoMood >= 0) m = (Mood)demoMood;
+    drawTamagotchi(quotaNow, m, (uint32_t)time(nullptr), frame);
   }
   delay(2);
 }
