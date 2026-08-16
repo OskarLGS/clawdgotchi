@@ -4,6 +4,7 @@
 #include <ESP8266WebServer.h>
 #include "store.h"
 #include "netlog.h"
+#include "htmlutil.h"
 
 #ifndef CLAWD_WIFI_SSID
 #define CLAWD_WIFI_SSID ""
@@ -21,16 +22,8 @@ O escribe la red: <input name=ssid_manual><br><br>
 Clave: <input type=password name=pass><br><br>
 <input type=submit value=Guardar></form>)";
 
-// escapa & < > " para no inyectar HTML/JS via SSIDs escaneados (nombres de
-// red los pone quien los crea, no son de fiar)
-inline String htmlEscape(const String& in) {
-  String s = in;
-  s.replace("&", "&amp;");
-  s.replace("<", "&lt;");
-  s.replace(">", "&gt;");
-  s.replace("\"", "&quot;");
-  return s;
-}
+// htmlEscape (SSIDs escaneados: nombres de red los pone quien los crea, no
+// son de fiar) vive en htmlutil.h, compartida con webui.h.
 
 // ponytail: las credenciales compiladas (CLAWD_WIFI_SSID/PASS) se conservan
 // como fallback de un solo uso cuando la config esta vacia (LittleFS recien

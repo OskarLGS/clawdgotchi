@@ -2,13 +2,14 @@
 #include <ESP8266WebServer.h>
 #include "store.h"
 #include "quota.h"
+#include "htmlutil.h"
 
 static const char SETTINGS_HTML[] PROGMEM = R"(<!doctype html><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>Clawdgotchi</title>
 <body style="font-family:sans-serif;background:#222;color:#eee;max-width:34em;margin:2em auto">
 <h2>&#129408; Clawdgotchi</h2>
-<p>5h: %P5%%% &middot; semana: %P7%%% &middot; heap %HEAP%</p>
+<p>5h: %P5%% &middot; semana: %P7%% &middot; heap %HEAP%</p>
 <form method=POST action=/cfg>
 <h3>Pantalla</h3>
 Modo: <select name=mode>
@@ -54,8 +55,7 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
     p.replace("%M1%", cfg.screenMode == 1 ? "selected" : "");
     p.replace("%M2%", cfg.screenMode == 2 ? "selected" : "");
     p.replace("%ROT%", String(cfg.rotateSeconds)); p.replace("%BRT%", String(cfg.brightness));
-    p.replace("%TZ%", cfg.tz); p.replace("%POLL%", String(cfg.pollMinutes));
-    p.replace("%WP%", cfg.webPass);
+    p.replace("%POLL%", String(cfg.pollMinutes));
     if (cfg.webPass[0]) {
       p.replace("%TOKMSG%", "");
       p.replace("%TOKDIS%", "");
@@ -63,6 +63,11 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
       p.replace("%TOKMSG%", "<p style=color:#f88>Configura primero una contrase&ntilde;a arriba y guarda para poder guardar el token.</p>");
       p.replace("%TOKDIS%", "disabled");
     }
+    // Texto libre de usuario al final y escapado: evita tanto XSS (< > " &)
+    // como que un valor con "%XX%" dentro reescriba otro placeholder ya
+    // sustituido por los .replace() de arriba (htmlEscape tambien escapa %).
+    p.replace("%TZ%", htmlEscape(cfg.tz));
+    p.replace("%WP%", htmlEscape(cfg.webPass));
     s.send(200, "text/html", p);
   });
   s.on("/cfg", HTTP_POST, [&] {
