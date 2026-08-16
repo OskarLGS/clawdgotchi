@@ -5,6 +5,7 @@
 #include "netlog.h"
 #include "ota.h"
 #include "spike.h"
+#include "store.h"
 
 #ifndef CLAWD_WIFI_SSID
 #define CLAWD_WIFI_SSID ""
@@ -15,6 +16,7 @@ NetLog netlog;
 ESP8266WebServer server(80);
 
 void setup() {
+  LittleFS.begin();
   WiFi.mode(WIFI_STA);
   WiFi.begin(CLAWD_WIFI_SSID, CLAWD_WIFI_PASS);
   for (int i = 0; i < 60 && WiFi.status() != WL_CONNECTED; i++) delay(500);
