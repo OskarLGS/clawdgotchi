@@ -29,11 +29,9 @@ void clockInvalidate() { s_force = true; }
 // Estado del ultimo pintado, para no repintar innecesariamente.
 struct PaintedState {
   bool valid = false;
-  int hour = -1, min = -1, sec = -1;
+  int sec = -1;
   int mday = -1, mon = -1;
-  char timeStr[8] = "";     // "HH:MM" o "--:--"
-  char secStr[4] = "";      // "SS"
-  char dateStr[20] = "";    // "sab 16 ago"
+  char timeStr[8] = "";     // "HH:MM" o "--:--"; el resto se compara por sec/mday/mon
 };
 static PaintedState s_last;
 
@@ -88,14 +86,10 @@ void drawClock(const tm& local) {
   // Actualiza el estado guardado.
   if (timeChanged || secsChanged || dateChanged) {
     s_last.valid = true;
-    s_last.hour = local.tm_hour;
-    s_last.min = local.tm_min;
     s_last.sec = local.tm_sec;
     s_last.mday = local.tm_mday;
     s_last.mon = local.tm_mon;
     snprintf(s_last.timeStr, sizeof s_last.timeStr, "%s", timeStr);
-    snprintf(s_last.secStr, sizeof s_last.secStr, "%s", secStr);
-    snprintf(s_last.dateStr, sizeof s_last.dateStr, "%s", dateStr);
     s_force = false;
   }
 }

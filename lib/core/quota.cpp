@@ -5,13 +5,14 @@
 #include <string.h>
 #include <math.h>
 
-static bool parsePct(const char* s, uint8_t& outPct) {
+static bool parsePct(const char* s, uint8_t& outPct, double& outRaw) {
   if (!s || !*s) return false;
   char* end = nullptr;
   double v = strtod(s, &end);
   if (end == s || v < 0) return false;
   double pct = round(v * 100.0);
   outPct = (uint8_t)(pct > 100 ? 100 : pct);
+  outRaw = v;
   return true;
 }
 static uint32_t parseEpoch(const char* s) {
@@ -22,10 +23,10 @@ bool parseRateHeaders(const char* u5, const char* r5, const char* u7,
                       const char* r7, const char* st, QuotaSnapshot& out) {
   out = QuotaSnapshot{};
   uint8_t p5, p7;
-  if (!parsePct(u5, p5) || !parsePct(u7, p7)) return false;
+  double raw5, raw7;
+  if (!parsePct(u5, p5, raw5) || !parsePct(u7, p7, raw7)) return false;
   out.pct5h = p5; out.pctWeek = p7;
   out.reset5h = parseEpoch(r5); out.resetWeek = parseEpoch(r7);
-  double raw5 = strtod(u5, nullptr), raw7 = strtod(u7, nullptr);
   out.exhausted = raw5 >= 1.0 || raw7 >= 1.0 ||
                   (st && strcmp(st, "rejected") == 0);
   out.valid = true;

@@ -3,7 +3,6 @@
 #include <WiFiClientSecureBearSSL.h>
 #include <ESP8266HTTPClient.h>
 #include <ArduinoJson.h>
-#include <base64.h>
 #include <bearssl/bearssl_hash.h>
 #include "store.h"
 #include "certs.h"
