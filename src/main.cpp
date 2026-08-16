@@ -213,32 +213,47 @@ void loop() {
       uint32_t rotSec = cfg.rotateSeconds ? cfg.rotateSeconds : 15;
       currentScreen = (int)((nowMs / 1000 / rotSec) % 2);
     }
+    time_t now = time(nullptr);
+    static bool lastAuthBad = false;
+
+    // Pinta la pantalla actual + el aviso "!" de auth. Se reusa en el dibujo
+    // normal de cada frame y dentro de la transicion (para pintar la pantalla
+    // nueva "bajo el negro" antes de subir el backlight).
+    auto drawScreen = [&]() {
+      if (currentScreen == 1) {
+        struct tm lt;
+        localtime_r(&now, &lt);
+        drawClock(lt);
+      } else {
+        Mood m = moodFor(quotaNow, WiFi.status() == WL_CONNECTED && !authBad);
+        drawTamagotchi(quotaNow, m, (uint32_t)now, frame);
+      }
+      if (authBad) {
+        tft.setTextDatum(TR_DATUM);
+        tft.setTextColor(TFT_RED, TFT_BLACK);
+        tft.drawString("!", 238, 2, 2);
+        tft.setTextDatum(TL_DATUM);
+      } else if (lastAuthBad) {
+        tft.fillRect(220, 0, 20, 18, TFT_BLACK);  // borra el "!" al recuperarse
+      }
+      lastAuthBad = authBad;
+    };
+
     static int lastScreen = -1;
     if (currentScreen != lastScreen) {
+      bool firstDraw = (lastScreen == -1);
       lastScreen = currentScreen;
+      // Transicion de opacidad via backlight: atenua a negro, cambia el
+      // contenido, y sube el brillo poco a poco. El primer pintado tras
+      // arrancar no hace fade (no hay nada de lo que salir).
+      if (!firstDraw) displayFade(cfg.brightness, 0);
       tft.fillScreen(TFT_BLACK);
       clockInvalidate();
       tamaInvalidate();
-    }
-
-    time_t now = time(nullptr);
-    if (currentScreen == 1) {
-      struct tm lt;
-      localtime_r(&now, &lt);
-      drawClock(lt);
+      drawScreen();
+      if (!firstDraw) displayFade(0, cfg.brightness);
     } else {
-      Mood m = moodFor(quotaNow, WiFi.status() == WL_CONNECTED && !authBad);
-      drawTamagotchi(quotaNow, m, (uint32_t)now, frame);
-    }
-
-    static bool lastAuthBad = false;
-    if (authBad) {
-      tft.setTextDatum(TR_DATUM);
-      tft.setTextColor(TFT_RED, TFT_BLACK);
-      tft.drawString("!", 238, 2, 2);
-      tft.setTextDatum(TL_DATUM);
-    } else if (lastAuthBad) {
-      tft.fillRect(220, 0, 20, 18, TFT_BLACK);  // borra el "!" al recuperarse
+      drawScreen();
     }
     lastAuthBad = authBad;
   }
