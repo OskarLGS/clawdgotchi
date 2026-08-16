@@ -34,7 +34,7 @@ static uint16_t colorForPct(uint8_t pct) {
 // top del bloque; aquí se pinta la fila de texto + la barra debajo.
 static void drawBar(int top, const char* line, uint8_t pct, bool ok) {
   tft.fillRect(0, top, 240, BLOCK_H, TFT_BLACK);
-  tft.setFreeFont(&FreeSans9pt7b);           // etiqueta y % en sans-serif
+  tft.setFreeFont(&FreeMono9pt7b);           // etiqueta y % en monoespaciada
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   // etiqueta a la izquierda (baseline)
   tft.setTextDatum(BL_DATUM);
