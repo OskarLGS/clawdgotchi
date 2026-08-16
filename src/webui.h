@@ -112,6 +112,7 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
     loadTokens(t);
     if (s.arg("access").length())  snprintf(t.access, sizeof t.access, "%s", s.arg("access").c_str());
     if (s.arg("refresh").length()) snprintf(t.refresh, sizeof t.refresh, "%s", s.arg("refresh").c_str());
+    if (s.arg("exp").length())     t.expiresAt = strtoul(s.arg("exp").c_str(), nullptr, 10);
     saveTokens(t);
     authBad = false;  // token nuevo: da otra oportunidad antes de volver a marcarlo
     pollPedido = true;  // revalida el token nuevo ya mismo, no esperar al proximo ciclo
