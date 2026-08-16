@@ -6,13 +6,18 @@
 #include <stdio.h>
 #include <string.h>
 
-// Layout (fijado en el brief de la task 12, no tocar sin actualizar el brief).
 static const int MASCOT_X = 72, MASCOT_Y = 18, MASCOT_SIZE = 96;
 static const int MASCOT_CLEAR_Y = 16, MASCOT_CLEAR_H = 100;  // franja para el rebote ±2px
-static const int BAR_X = 20, BAR_W = 160, BAR_H = 18;
-static const int BAR_5H_Y = 140, BAR_WK_Y = 185;
-static const int LABEL_H = 16;                    // alto de font 2
-static const int ROW_CLEAR_W = 240 - BAR_X;        // hasta el borde derecho (x=240)
+// Cada "bloque" de cuota = fila de etiqueta ("5h (2h 57m)" a la izq, "18%" a la
+// derecha) + barra a lo ancho maximo debajo. Coordenadas relativas al top del
+// bloque para que la fuente GFX (mas alta que Font 2) no se corte por arriba.
+static const int MARGIN_X = 10;
+static const int BAR_W = 240 - 2 * MARGIN_X;      // 220: barra a lo ancho
+static const int BAR_H = 14;
+static const int BLOCK1_Y = 126, BLOCK2_Y = 182;  // top de cada bloque
+static const int LABEL_BASE = 16;                 // baseline de la etiqueta (rel. al top)
+static const int BAR_TOP = 22;                    // top de la barra (rel. al top)
+static const int BLOCK_H = 38;                    // alto a limpiar por bloque
 
 static bool s_force = true;
 
@@ -25,28 +30,30 @@ static uint16_t colorForPct(uint8_t pct) {
   return TFT_GREEN;
 }
 
-// 'line' ya viene formateada (etiqueta+countdown, o el "despierta en X" de
-// SLEEPING) por el caller; aquí solo se pinta.
-static void drawBar(int y, const char* line, uint8_t pct, bool ok) {
-  tft.fillRect(BAR_X, y - LABEL_H, ROW_CLEAR_W, LABEL_H + BAR_H, TFT_BLACK);
+// 'line' ya viene formateada (etiqueta+countdown) por el caller. 'top' es el
+// top del bloque; aquí se pinta la fila de texto + la barra debajo.
+static void drawBar(int top, const char* line, uint8_t pct, bool ok) {
+  tft.fillRect(0, top, 240, BLOCK_H, TFT_BLACK);
+  tft.setFreeFont(&FreeSans9pt7b);           // etiqueta y % en sans-serif
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setTextDatum(TL_DATUM);
-  // Etiqueta + countdown en FreeSans (GFX sans-serif); BL_DATUM (baseline) para
-  // asentarla justo encima de la barra. La baseline va en y-2.
-  tft.setFreeFont(&FreeSans9pt7b);
+  // etiqueta a la izquierda (baseline)
   tft.setTextDatum(BL_DATUM);
-  tft.drawString(line, BAR_X, y - 2);
-
-  tft.drawRect(BAR_X, y, BAR_W, BAR_H, TFT_DARKGREY);
+  tft.drawString(line, MARGIN_X, top + LABEL_BASE);
+  // % a la derecha del todo
   if (ok) {
-    int fillW = (int)((BAR_W - 2) * (pct > 100 ? 100 : pct) / 100);
-    if (fillW > 0) tft.fillRect(BAR_X + 1, y + 1, fillW, BAR_H - 2, colorForPct(pct));
     char pctbuf[8];
     snprintf(pctbuf, sizeof pctbuf, "%u%%", pct);
-    tft.setTextDatum(ML_DATUM);
-    tft.drawString(pctbuf, BAR_X + BAR_W + 4, y + BAR_H / 2);
+    tft.setTextDatum(BR_DATUM);
+    tft.drawString(pctbuf, 240 - MARGIN_X, top + LABEL_BASE);
   }
-  tft.setTextFont(2);         // restaura fuente por defecto para el resto
+  // barra a lo ancho maximo, debajo de la fila de texto
+  int by = top + BAR_TOP;
+  tft.drawRect(MARGIN_X, by, BAR_W, BAR_H, TFT_DARKGREY);
+  if (ok) {
+    int fillW = (int)((BAR_W - 2) * (pct > 100 ? 100 : pct) / 100);
+    if (fillW > 0) tft.fillRect(MARGIN_X + 1, by + 1, fillW, BAR_H - 2, colorForPct(pct));
+  }
+  tft.setTextFont(2);          // restaura fuente por defecto para el resto
   tft.setTextDatum(TL_DATUM);
 }
 
@@ -77,22 +84,15 @@ void drawTamagotchi(const QuotaSnapshot& q, Mood m, uint32_t nowEpoch, uint8_t f
   // resetWeek son epochs reales pero "nowEpoch" no lo es -> formatCountdown
   // pintaria basura tipo "20000d Xh". Se trata igual que !q.valid.
   bool ntpOk = nowEpoch >= 1600000000;
-  char cd5h[24], cdWk[24];
+  char cd5h[28], cdWk[28];
   if (q.valid && ntpOk) {
-    if (sleeping) {
-      char c[16]; formatCountdown(nowEpoch, q.reset5h, c, sizeof c);
-      snprintf(cd5h, sizeof cd5h, "despierta en %s", c);
-    } else {
-      char c[16]; formatCountdown(nowEpoch, q.reset5h, c, sizeof c);
-      snprintf(cd5h, sizeof cd5h, "5h  %s", c);
-    }
-    if (sleeping) {
-      char c[16]; formatCountdown(nowEpoch, q.resetWeek, c, sizeof c);
-      snprintf(cdWk, sizeof cdWk, "despierta en %s", c);
-    } else {
-      char c[16]; formatCountdown(nowEpoch, q.resetWeek, c, sizeof c);
-      snprintf(cdWk, sizeof cdWk, "semana  %s", c);
-    }
+    char c[16];
+    formatCountdown(nowEpoch, q.reset5h, c, sizeof c);
+    if (sleeping) snprintf(cd5h, sizeof cd5h, "despierta en %s", c);
+    else          snprintf(cd5h, sizeof cd5h, "5h (%s)", c);
+    formatCountdown(nowEpoch, q.resetWeek, c, sizeof c);
+    if (sleeping) snprintf(cdWk, sizeof cdWk, "despierta en %s", c);
+    else          snprintf(cdWk, sizeof cdWk, "semana (%s)", c);
   } else {
     snprintf(cd5h, sizeof cd5h, "5h  --");
     snprintf(cdWk, sizeof cdWk, "semana  --");
@@ -103,14 +103,12 @@ void drawTamagotchi(const QuotaSnapshot& q, Mood m, uint32_t nowEpoch, uint8_t f
                  strcmp(s_last.line5h, cd5h) != 0 || strcmp(s_last.lineWk, cdWk) != 0;
 
   if (changed) {
-    drawBar(BAR_5H_Y, cd5h, q.pct5h, q.valid);
-    drawBar(BAR_WK_Y, cdWk, q.pctWeek, q.valid);
+    drawBar(BLOCK1_Y, cd5h, q.pct5h, q.valid);
+    drawBar(BLOCK2_Y, cdWk, q.pctWeek, q.valid);
 
-    // texto "sin conexión" bajo la mascota, en la franja libre encima de las barras
-    tft.fillRect(0, MASCOT_CLEAR_Y + MASCOT_CLEAR_H, 240, BAR_5H_Y - LABEL_H - (MASCOT_CLEAR_Y + MASCOT_CLEAR_H), TFT_BLACK);
+    // texto "sin conexión" bajo la mascota, en la franja libre encima del bloque 1
+    tft.fillRect(0, MASCOT_CLEAR_Y + MASCOT_CLEAR_H, 240, BLOCK1_Y - (MASCOT_CLEAR_Y + MASCOT_CLEAR_H), TFT_BLACK);
     if (offline) {
-      // solo 8px libres entre la mascota (fin y=116) y la etiqueta de la
-      // barra 5h (empieza y=124): font 1 (6x8) es el único que cabe ahí.
       tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
       tft.setTextDatum(TC_DATUM);
       tft.drawString("sin conexion", 120, MASCOT_CLEAR_Y + MASCOT_CLEAR_H, 1);
