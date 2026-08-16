@@ -10,6 +10,7 @@ struct Config {
   uint8_t brightness = 80;                       // 0..100
   uint8_t screenMode = 0;                        // 0=rotación 1=tamagotchi 2=reloj
   uint16_t rotateSeconds = 15;
+  uint16_t fadeMs = 300;                         // duración total del fade entre pantallas (0 = instantáneo)
   char webPass[33] = "";                         // "" = sin password (hasta guardar token)
 };
 

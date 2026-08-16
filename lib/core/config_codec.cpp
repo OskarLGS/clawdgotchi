@@ -16,6 +16,7 @@ bool configFromJson(const char* json, Config& out) {
   out.brightness   = d["brt"]  | out.brightness;
   out.screenMode   = d["mode"] | out.screenMode;
   out.rotateSeconds= d["rot"]  | out.rotateSeconds;
+  out.fadeMs       = d["fade"] | out.fadeMs;
   if (d["webpass"].is<const char*>()) cp(out.webPass, sizeof out.webPass, d["webpass"]);
   return true;
 }
@@ -29,6 +30,7 @@ bool configToJson(const Config& c, char* out, size_t n) {
   d["brt"] = c.brightness;
   d["mode"] = c.screenMode;
   d["rot"] = c.rotateSeconds;
+  d["fade"] = c.fadeMs;
   d["webpass"] = c.webPass;
   return serializeJson(d, out, n) > 0;
 }

@@ -245,13 +245,15 @@ void loop() {
       lastScreen = currentScreen;
       // Transicion de opacidad via backlight: atenua a negro, cambia el
       // contenido, y sube el brillo poco a poco. El primer pintado tras
-      // arrancar no hace fade (no hay nada de lo que salir).
-      if (!firstDraw) displayFade(cfg.brightness, 0);
+      // arrancar no hace fade (no hay nada de lo que salir). cfg.fadeMs=0 ->
+      // cambio instantaneo. La duracion se reparte entre bajada y subida.
+      uint16_t half = cfg.fadeMs / 2;
+      if (!firstDraw) displayFade(cfg.brightness, 0, half);
       tft.fillScreen(TFT_BLACK);
       clockInvalidate();
       tamaInvalidate();
       drawScreen();
-      if (!firstDraw) displayFade(0, cfg.brightness);
+      if (!firstDraw) displayFade(0, cfg.brightness, half);
     } else {
       drawScreen();
     }

@@ -62,6 +62,7 @@ details{margin-top:14px}details summary{cursor:pointer;color:var(--muted);font-s
 <label>Pantalla</label>
 <select name=mode><option value=0 %M0%>Rotaci&oacute;n autom&aacute;tica</option><option value=1 %M1%>Solo tamagotchi</option><option value=2 %M2%>Solo reloj</option></select>
 <div class=row><div><label>Rotar cada (s)</label><input name=rot value=%ROT%></div><div><label>Consultar (min)</label><input name=poll value=%POLL%></div></div>
+<label>Transici&oacute;n / fade: <span id=fv>%FADE%</span> ms</label><input type=range name=fade min=0 max=1000 step=50 value=%FADE% oninput="fv.textContent=this.value">
 <label>Brillo: <span id=bv>%BRT%</span>%</label><input type=range name=brt min=5 max=100 value=%BRT% oninput="bv.textContent=this.value">
 <label>Zona horaria (POSIX)</label><input name=tz value="%TZ%">
 <label>Contrase&ntilde;a web &mdash; usuario: admin</label><input name=webpass value="%WP%">
@@ -116,7 +117,7 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
     p.replace("%M2%", cfg.screenMode == 2 ? "selected" : "");
     p.replace("%C5%", barColor(quotaNow.pct5h)); p.replace("%C7%", barColor(quotaNow.pctWeek));
     p.replace("%ROT%", String(cfg.rotateSeconds)); p.replace("%BRT%", String(cfg.brightness));
-    p.replace("%POLL%", String(cfg.pollMinutes));
+    p.replace("%POLL%", String(cfg.pollMinutes)); p.replace("%FADE%", String(cfg.fadeMs));
     p.replace("%SAFEMODE%", safeMode ?
       "<div class=warn><b>Modo seguro</b> tras 3 crashes. Se reintentar&aacute; el arranque normal en unos segundos, o sube un firmware corregido en /update.</div>" : "");
     if (cfg.webPass[0]) {
@@ -145,6 +146,7 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
     cfg.screenMode = s.arg("mode").toInt();
     cfg.rotateSeconds = constrain(s.arg("rot").toInt(), 3, 3600);
     cfg.brightness = constrain(s.arg("brt").toInt(), 5, 100);
+    cfg.fadeMs = constrain(s.arg("fade").toInt(), 0, 2000);
     snprintf(cfg.tz, sizeof cfg.tz, "%s", s.arg("tz").c_str());
     cfg.pollMinutes = constrain(s.arg("poll").toInt(), 1, 1440);
     snprintf(cfg.webPass, sizeof cfg.webPass, "%s", s.arg("webpass").c_str());
