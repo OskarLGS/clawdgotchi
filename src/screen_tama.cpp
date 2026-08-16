@@ -2,6 +2,7 @@
 #include "screen_tama.h"
 #include "display.h"
 #include "mascot.h"
+// FreeSans9pt7b lo declara TFT_eSPI al estar LOAD_GFXFF activo (no re-incluir).
 #include <stdio.h>
 #include <string.h>
 
@@ -30,7 +31,11 @@ static void drawBar(int y, const char* line, uint8_t pct, bool ok) {
   tft.fillRect(BAR_X, y - LABEL_H, ROW_CLEAR_W, LABEL_H + BAR_H, TFT_BLACK);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.setTextDatum(TL_DATUM);
-  tft.drawString(line, BAR_X, y - LABEL_H, 2);
+  // Etiqueta + countdown en FreeSans (GFX sans-serif); BL_DATUM (baseline) para
+  // asentarla justo encima de la barra. La baseline va en y-2.
+  tft.setFreeFont(&FreeSans9pt7b);
+  tft.setTextDatum(BL_DATUM);
+  tft.drawString(line, BAR_X, y - 2);
 
   tft.drawRect(BAR_X, y, BAR_W, BAR_H, TFT_DARKGREY);
   if (ok) {
@@ -38,9 +43,11 @@ static void drawBar(int y, const char* line, uint8_t pct, bool ok) {
     if (fillW > 0) tft.fillRect(BAR_X + 1, y + 1, fillW, BAR_H - 2, colorForPct(pct));
     char pctbuf[8];
     snprintf(pctbuf, sizeof pctbuf, "%u%%", pct);
-    tft.setTextDatum(TL_DATUM);
-    tft.drawString(pctbuf, BAR_X + BAR_W + 4, y + 2, 2);
+    tft.setTextDatum(ML_DATUM);
+    tft.drawString(pctbuf, BAR_X + BAR_W + 4, y + BAR_H / 2);
   }
+  tft.setTextFont(2);         // restaura fuente por defecto para el resto
+  tft.setTextDatum(TL_DATUM);
 }
 
 // Copia del último estado pintado, para no repintar barras/texto cada 500ms
