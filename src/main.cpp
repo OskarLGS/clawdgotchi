@@ -11,6 +11,7 @@
 #include "webui.h"
 #include "display.h"
 #include "screen_tama.h"
+#include "screen_clock.h"
 
 NetLog netlog;
 ESP8266WebServer server(80);
@@ -21,6 +22,8 @@ static uint32_t lastPollOk = 0;
 // -1 = sin forzar (humor real); 0..5 = índice de Mood forzado por /demo.
 // Ruta de debug temporal para probar los 6 humores en pantalla; T14 la retira.
 static int demoMood = -1;
+// Demo de pantalla reloj (T14 lo sustituye por cfg.screenMode).
+static bool demoClock = false;
 
 void setup() {
   LittleFS.begin();
@@ -28,7 +31,7 @@ void setup() {
   wifiConnectOrPortal(cfg);
   displayBegin(cfg.brightness);
   MDNS.begin("clawdgotchi");
-  configTime(0, 0, "pool.ntp.org");  // la validacion de certs necesita hora
+  configTime(cfg.tz, "pool.ntp.org");  // POSIX TZ de config; la validacion de certs necesita hora
   webuiRoutes(server, cfg, quotaNow);
   server.on("/log", [] {
     if (!webAuth(server, cfg)) return;
@@ -48,14 +51,27 @@ void setup() {
                 "% 7d=" + quotaNow.pctWeek + "% exhausted=" + quotaNow.exhausted +
                 " lastPollOk=" + lastPollOk);
   });
-  // Debug temporal (task 12): fuerza uno de los 6 humores en pantalla.
-  // GET /demo?mood=0..5 (HAPPY..OFFLINE); sin arg o fuera de rango = normal.
-  // Se retira en la task 14.
+  // Debug temporal (task 12/13): fuerza humor o pantalla en demo.
+  // GET /demo?mood=0..5 (HAPPY..OFFLINE): fuerza humor en pantalla tamagotchi.
+  // GET /demo?clock=1: activa demo de pantalla reloj (localtime con TZ de config).
+  // Sin argumentos: desactiva demos. Se retira en la task 14.
   server.on("/demo", [] {
     if (!webAuth(server, cfg)) return;
-    int v = server.hasArg("mood") ? server.arg("mood").toInt() : -1;
-    demoMood = (v >= 0 && v <= 5) ? v : -1;
-    server.send(200, "text/plain", String("demoMood=") + demoMood);
+    if (server.hasArg("clock")) {
+      demoClock = server.arg("clock").toInt() != 0;
+      demoMood = -1;  // desactiva mood si activamos clock
+      clockInvalidate();
+      server.send(200, "text/plain", String("demoClock=") + (demoClock ? "true" : "false"));
+    } else if (server.hasArg("mood")) {
+      int v = server.arg("mood").toInt();
+      demoMood = (v >= 0 && v <= 5) ? v : -1;
+      demoClock = false;  // desactiva clock si activamos mood
+      server.send(200, "text/plain", String("demoMood=") + demoMood);
+    } else {
+      demoMood = -1;
+      demoClock = false;
+      server.send(200, "text/plain", "demos off");
+    }
   });
   otaBegin(server, cfg);
   server.begin();
@@ -89,9 +105,16 @@ void loop() {
   if (nowMs - lastFrameMs >= 500) {
     lastFrameMs = nowMs;
     frame ^= 1;
-    Mood m = moodFor(quotaNow, WiFi.status() == WL_CONNECTED);
-    if (demoMood >= 0) m = (Mood)demoMood;
-    drawTamagotchi(quotaNow, m, (uint32_t)time(nullptr), frame);
+    time_t now = time(nullptr);
+    if (demoClock) {
+      struct tm lt;
+      localtime_r(&now, &lt);
+      drawClock(lt);
+    } else {
+      Mood m = moodFor(quotaNow, WiFi.status() == WL_CONNECTED);
+      if (demoMood >= 0) m = (Mood)demoMood;
+      drawTamagotchi(quotaNow, m, (uint32_t)now, frame);
+    }
   }
   delay(2);
 }
