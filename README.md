@@ -51,15 +51,16 @@ A partir de la segunda instalación, todo se hace por OTA.
 2. Abre `http://192.168.4.1` en el navegador
 3. Configura red WiFi (SSID + contraseña)
 4. Reinicia y accede a `http://clawdgotchi.local` (o por IP)
-5. Portal de configuración:
+5. Portal de configuración (usuario del navegador siempre **`admin`**):
    - Password de la web UI: configúrala y guárdala primero — es **obligatoria**
-     para poder guardar el token después (`/token` responde 403 sin ella).
-     Al pedir credenciales el navegador, el usuario es siempre **`admin`**
-   - Token de Claude Code: usa `claude setup-token` en la CLI de Claude Code y pega el token
-
-## ⚠️ ADVERTENCIA: Estado actual
-
-**El cubo requiere recuperación por UART** tras un flasheo de diagnóstico durante desarrollo. Lee [docs/decisiones.md](docs/decisiones.md) para detalles de recuperación (~15 minutos con adaptador USB-TTL).
+     para poder iniciar sesión con Claude después.
+   - **Iniciar sesión con Claude (sin ordenador)** — la vía recomendada: pulsa
+     «Abrir login de Claude» desde el móvil, inicia sesión, copia el código que
+     te da Claude y pégalo en el cubo. El dispositivo hace el canje OAuth él
+     solo y guarda access + refresh token, así que se renueva para siempre sin
+     PC ni CLI.
+   - Alternativa manual: pega un token de `claude setup-token` en el formulario
+     de token.
 
 Una vez recuperado, la verificación completa de hardware es la siguiente tarea.
 

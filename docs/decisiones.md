@@ -1,12 +1,19 @@
 # Decisiones tomadas en autonomía
 
-> ## ⚠️ LO PRIMERO QUE DEBES LEER: el cubo necesita recuperación por UART
+> ## Estado (actualizado): firmware funcionando en el cubo nuevo
 >
-> Durante la Task 7 un subagente flasheó una build de diagnóstico con
-> `CONT_STACKSIZE=8192` (hack de linker NO commiteado). Ese flag corrompe
-> la región SYS del ESP8266 al arrancar: el cubo entra en bucle de crash
-> **antes de levantar el WiFi**, así que no responde a HTTP ni a OTA.
-> Encender/apagar no lo arregla.
+> El proyecto está **operativo** en el segundo cubo (192.168.1.116): login
+> OAuth en el dispositivo, cuotas reales en pantalla, poll periódico. El
+> firmware es robusto (TLS a 8 KB que cabe en RAM, modo seguro
+> auto-recuperable en 30 s sin tirón de cable). `backup/rescue-firmware.bin`
+> es esta build buena.
+>
+> ## El PRIMER cubo sigue necesitando recuperación por UART
+>
+> Aparte, el primer cubo (192.168.1.114) quedó con una build de diagnóstico
+> `CONT_STACKSIZE=8192` (hack de linker NO commiteado, ya prohibido) que
+> corrompe la región SYS al arrancar — no responde a HTTP ni a OTA. Solo se
+> recupera por UART.
 >
 > **Cómo recuperarlo (~15 min):**
 > 1. Necesitas un adaptador USB-TTL de 3.3 V (CP2102/CH340/FTDI).
