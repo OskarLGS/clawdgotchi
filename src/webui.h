@@ -41,14 +41,14 @@ Consultar cada <input name=poll size=3 value=%POLL%> min<br><br>
 <h3>Seguridad</h3>
 Password web UI: <input name=webpass value="%WP%"><br>
 <small>Tras cambiarla, reinicia el cubo para que se aplique tambi&eacute;n a /update.</small><br><br>
-<input type=submit value=Guardar>
+<input type=submit value="Guardar ajustes">
 </form>
 <h3>Iniciar sesi&oacute;n con Claude (sin ordenador)</h3>
 %OAUTHMSG%
 <p>1. <a href=/oauth/start target=_blank %OAUTHDIS%>Abrir login de Claude</a> desde el m&oacute;vil, inicia sesi&oacute;n y copia el c&oacute;digo que te da.</p>
 <form method=POST action=/oauth/finish>
 2. Pega aqu&iacute; el c&oacute;digo: <input name=code size=40 %OAUTHDIS%><br><br>
-<input type=submit value="Guardar" %OAUTHDIS%>
+<input type=submit value="Iniciar sesi&oacute;n" %OAUTHDIS%>
 </form>
 <form method=POST action=/token>
 <h3>Token de Claude (alternativa manual)</h3>
@@ -100,6 +100,7 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
     // sustituido por los .replace() de arriba (htmlEscape tambien escapa %).
     p.replace("%TZ%", htmlEscape(cfg.tz));
     p.replace("%WP%", htmlEscape(cfg.webPass));
+    s.sendHeader("Cache-Control", "no-store");  // muestra siempre los valores recien guardados
     s.send(200, "text/html", p);
   });
   s.on("/cfg", HTTP_POST, [&] {
