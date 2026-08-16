@@ -3,6 +3,7 @@
 #include "store.h"
 #include "quota.h"
 #include "htmlutil.h"
+#include "display.h"
 
 static const char SETTINGS_HTML[] PROGMEM = R"(<!doctype html><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
@@ -79,6 +80,7 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
     cfg.pollMinutes = s.arg("poll").toInt();
     snprintf(cfg.webPass, sizeof cfg.webPass, "%s", s.arg("webpass").c_str());
     saveConfig(cfg);
+    displayBrightness(cfg.brightness);
     s.sendHeader("Location", "/");
     s.send(303);
   });

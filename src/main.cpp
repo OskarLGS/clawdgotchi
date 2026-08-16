@@ -9,6 +9,7 @@
 #include "wifi_portal.h"
 #include "claude_client.h"
 #include "webui.h"
+#include "display.h"
 
 NetLog netlog;
 ESP8266WebServer server(80);
@@ -21,6 +22,9 @@ void setup() {
   LittleFS.begin();
   loadConfig(cfg);
   wifiConnectOrPortal(cfg);
+  displayBegin(cfg.brightness);
+  tft.setTextColor(TFT_ORANGE);
+  tft.drawString("clawdgotchi", 60, 110, 4);
   MDNS.begin("clawdgotchi");
   configTime(0, 0, "pool.ntp.org");  // la validacion de certs necesita hora
   webuiRoutes(server, cfg, quotaNow);
