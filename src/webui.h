@@ -10,6 +10,7 @@
 // real de arranque y de autenticacion con Claude.
 extern bool safeMode;
 extern bool authBad;
+extern bool pollPedido;
 
 static const char SETTINGS_HTML[] PROGMEM = R"(<!doctype html><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
@@ -65,7 +66,7 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
     p.replace("%ROT%", String(cfg.rotateSeconds)); p.replace("%BRT%", String(cfg.brightness));
     p.replace("%POLL%", String(cfg.pollMinutes));
     p.replace("%SAFEMODE%", safeMode ?
-      "<p style=color:#f88><b>MODO SEGURO</b>: 3 reinicios por fallo seguidos. Solo web UI y /update; pantalla y consultas a Claude desactivadas. Reflashea o espera 60s estables para recuperar el arranque normal.</p>" : "");
+      "<p style=color:#f88><b>MODO SEGURO</b> tras 3 crashes. Desenchufa y vuelve a enchufar para reintentar el arranque normal, o sube un firmware corregido en /update.</p>" : "");
     if (cfg.webPass[0]) {
       p.replace("%TOKMSG%", authBad ?
         "<p style=color:#f88>Token invalido o caducado sin refresh posible. Pega uno nuevo abajo.</p>" : "");
@@ -84,14 +85,21 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
   s.on("/cfg", HTTP_POST, [&] {
     if (!webAuth(s, cfg)) return;
     cfg.screenMode = s.arg("mode").toInt();
-    cfg.rotateSeconds = s.arg("rot").toInt();
-    cfg.brightness = s.arg("brt").toInt();
+    cfg.rotateSeconds = constrain(s.arg("rot").toInt(), 3, 3600);
+    cfg.brightness = constrain(s.arg("brt").toInt(), 5, 100);
     snprintf(cfg.tz, sizeof cfg.tz, "%s", s.arg("tz").c_str());
-    cfg.pollMinutes = s.arg("poll").toInt();
+    cfg.pollMinutes = constrain(s.arg("poll").toInt(), 1, 1440);
     snprintf(cfg.webPass, sizeof cfg.webPass, "%s", s.arg("webpass").c_str());
     saveConfig(cfg);
     setTZ(cfg.tz);  // aplicar TZ inmediatamente sin necesidad de reiniciar
     displayBrightness(cfg.brightness);
+    // pollMinutes puede haber cambiado: nextPollMs (planificador de
+    // main.cpp) es un static local a runPoll(), no expuesto aqui. En vez de
+    // exponerlo con otro extern, reusamos pollPedido para forzar un poll ya
+    // mismo: el poll siguiente vuelve a calcular nextPollMs con el intervalo
+    // nuevo. Efecto secundario asumido: cualquier guardado en /cfg (aunque
+    // solo cambie brillo o TZ) adelanta el proximo poll.
+    pollPedido = true;
     s.sendHeader("Location", "/");
     s.send(303);
   });
@@ -104,6 +112,7 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
     if (s.arg("refresh").length()) snprintf(t.refresh, sizeof t.refresh, "%s", s.arg("refresh").c_str());
     saveTokens(t);
     authBad = false;  // token nuevo: da otra oportunidad antes de volver a marcarlo
+    pollPedido = true;  // revalida el token nuevo ya mismo, no esperar al proximo ciclo
     s.sendHeader("Location", "/");
     s.send(303);
   });

@@ -18,7 +18,8 @@ NetLog netlog;
 ESP8266WebServer server(80);
 QuotaSnapshot quotaNow;
 Config cfg;
-static bool pollPedido = false;
+// No static: webui.h necesita ponerlo a true desde /token y /cfg (extern).
+bool pollPedido = false;
 static uint32_t lastPollOk = 0;
 // Modo seguro (3 crashes seguidos, ver safemode.h): solo web UI + /update,
 // sin pantalla ni consultas a Claude. Leido tambien por webui.h (extern).
@@ -29,9 +30,13 @@ bool safeMode = false;
 bool authBad = false;
 
 void setup() {
+  // Primera linea, antes de tocar LittleFS: un FS corrupto que haga crashear
+  // el propio LittleFS.begin()/loadConfig debe poder contarse como crash y
+  // llevar a modo seguro, no solo los crashes de despues.
+  bool safe = safeModeRequested();
   LittleFS.begin();
   loadConfig(cfg);
-  if (safeModeRequested()) {
+  if (safe) {
     safeMode = true;
     wifiConnectOrPortal(cfg);
     MDNS.begin("clawdgotchi");
@@ -86,16 +91,14 @@ static void runPoll(uint32_t nowMs, bool ntpVisto) {
 
   if (!ntpVisto) {
     // Solo se llega aqui via /poll (pollPedido): un poll programado nunca
-    // dispara sin NTP, ver ntpVisto en loop(). Espera acotada, una unica vez
-    // por arranque hasta que sincronice (o se agote el margen y se reintente
-    // el siguiente ciclo) - no bloquea handleClient() en cada poll.
-    time_t now = 0;
-    for (int i = 0; i < 40 && (now = time(nullptr)) < 1600000000; i++) delay(250);
-    if (now < 1600000000) {
-      pollPedido = true;  // reintenta el proximo loop
-      LOGN("poll aplazado: sin NTP");
-      return;
-    }
+    // dispara sin NTP, ver "due" arriba. NADA de esperar bloqueando: loop()
+    // ya comprueba time(nullptr) sin bloqueo en cada iteracion y nos pasara
+    // ntpVisto=true en cuanto sincronice; aqui solo dejamos pollPedido
+    // pendiente para ese momento y logueamos una vez (no en cada iteracion,
+    // que con handleClient corriendo cada ~2ms inundaria el log).
+    static bool logged = false;
+    if (!logged) { LOGN("poll aplazado: sin NTP"); logged = true; }
+    return;
   }
   pollPedido = false;
 
