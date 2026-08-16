@@ -242,14 +242,16 @@ def verify_no_pure_black(canvas, name):
 
 
 def upscale(canvas):
-    """24x24 (con None = fondo) -> lista 96x96 de tuplas RGB."""
+    """24x24 (con None = fondo) -> lista 96x96 de tuplas RGB u None (fondo).
+
+    None se conserva (no se convierte a (0,0,0) todavia) para que el fondo
+    siga siendo distinguible del cuerpo hasta el punto en que cada uno se
+    cuantiza a su valor final (PNG vs RGB565).
+    """
     out = []
     for row in range(SIZE):
         src_row = canvas[row // SCALE]
-        line = []
-        for col in range(SIZE):
-            px = src_row[col // SCALE]
-            line.append(px if px is not None else (0, 0, 0))
+        line = [src_row[col // SCALE] for col in range(SIZE)]
         out.append(line)
     return out
 
@@ -259,13 +261,30 @@ def save_png(pixels96, path):
     img = Image.new("RGB", (SIZE, SIZE), (0, 0, 0))
     for row in range(SIZE):
         for col in range(SIZE):
-            img.putpixel((col, row), pixels96[row][col])
+            px = pixels96[row][col]
+            img.putpixel((col, row), px if px is not None else (0, 0, 0))
     img.save(path)
+
+
+def pixel_rgb565(px):
+    """Fondo (None) -> clave de transparencia 0x0000 literal. Cuerpo -> rgb565
+    (con el bump anti-negro, que nunca debe pisar la clave de fondo)."""
+    return 0x0000 if px is None else rgb565(px)
+
+
+def verify_transparency_key(pixels96, name):
+    """Assert sobre el artefacto final: el fondo (>=1 pixel) emite 0x0000 y
+    ningun pixel de cuerpo lo hace (si lo hiciera, se volveria invisible)."""
+    values = [pixel_rgb565(px) for row in pixels96 for px in row]
+    assert 0x0000 in values, f"{name}: no quedo ningun pixel de fondo (0x0000)"
+    for px, v in zip((px for row in pixels96 for px in row), values):
+        if px is not None:
+            assert v != 0x0000, f"{name}: un pixel de cuerpo emite la clave de fondo"
 
 
 def emit_array(f, name, pixels96):
     f.write(f"const uint16_t {name}[{SIZE * SIZE}] PROGMEM = {{\n")
-    values = [str(rgb565(px)) for row in pixels96 for px in row]
+    values = [f"0x{pixel_rgb565(px):04X}" for row in pixels96 for px in row]
     for i in range(0, len(values), 16):
         f.write("  " + ",".join(values[i:i + 16]) + ",\n")
     f.write("};\n\n")
@@ -279,6 +298,7 @@ def main():
             canvas = draw(frame)
             verify_no_pure_black(canvas, f"{mood}_{frame}")
             pixels96 = upscale(canvas)
+            verify_transparency_key(pixels96, f"{mood}_{frame}")
             sprites[(mood, frame)] = pixels96
             png_path = os.path.join(ASSETS_DIR, f"sprite_{mood.lower()}_{frame}.png")
             save_png(pixels96, png_path)
