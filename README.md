@@ -53,7 +53,8 @@ A partir de la segunda instalación, todo se hace por OTA.
 4. Reinicia y accede a `http://clawdgotchi.local` (o por IP)
 5. Portal de configuración:
    - Password de la web UI: configúrala y guárdala primero — es **obligatoria**
-     para poder guardar el token después (`/token` responde 403 sin ella)
+     para poder guardar el token después (`/token` responde 403 sin ella).
+     Al pedir credenciales el navegador, el usuario es siempre **`admin`**
    - Token de Claude Code: usa `claude setup-token` en la CLI de Claude Code y pega el token
 
 ## ⚠️ ADVERTENCIA: Estado actual
