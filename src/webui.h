@@ -23,49 +23,85 @@ extern String g_pendingCode;
 static const char SETTINGS_HTML[] PROGMEM = R"(<!doctype html><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>Clawdgotchi</title>
-<body style="font-family:sans-serif;background:#222;color:#eee;max-width:34em;margin:2em auto">
-<h2>&#129408; Clawdgotchi</h2>
+<style>
+:root{--bg:#1b1b19;--card:#26251f;--fg:#ededed;--muted:#9d988c;--coral:#d97757;--bd:#39392f}
+*{box-sizing:border-box}
+body{font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg);margin:0;padding:16px;line-height:1.5}
+.wrap{max-width:30em;margin:0 auto}
+h1{font-size:1.45em;margin:.1em 0 .7em;display:flex;align-items:center;gap:.35em}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:14px}
+.card h2{font-size:.72em;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 12px;font-weight:600}
+label{display:block;font-size:.9em;color:var(--muted);margin:14px 0 5px}
+input,select{width:100%;padding:10px 12px;background:#151513;border:1px solid var(--bd);border-radius:8px;color:var(--fg);font-size:1em;font-family:inherit}
+input[type=range]{padding:0;accent-color:var(--coral)}
+.row{display:flex;gap:10px}.row>div{flex:1}
+button,.btn{display:block;width:100%;margin-top:16px;padding:12px;background:var(--coral);color:#1b1b19;border:0;border-radius:9px;font-size:1em;font-weight:600;cursor:pointer;text-align:center;text-decoration:none}
+.btn.ghost{background:transparent;color:var(--coral);border:1px solid var(--coral)}
+.bar{height:20px;background:#151513;border-radius:6px;overflow:hidden;margin:4px 0 14px}
+.bar>span{display:block;height:100%;border-radius:6px;transition:width .3s}
+.q{display:flex;justify-content:space-between;font-size:.92em;margin-bottom:3px}
+.muted{color:var(--muted);font-size:.85em;margin-top:6px}
+.warn{background:#3a2420;border:1px solid var(--coral);border-radius:9px;padding:10px 12px;color:#f0b8a6;font-size:.9em;margin-bottom:12px}
+a{color:var(--coral)}
+details{margin-top:14px}details summary{cursor:pointer;color:var(--muted);font-size:.9em}
+.foot{text-align:center;font-size:.88em;margin-top:2px}
+</style>
+<body><div class=wrap>
+<h1>&#129408; Clawdgotchi</h1>
 %SAFEMODE%
-<p>5h: %P5%% &middot; semana: %P7%% &middot; heap %HEAP%</p>
-<form method=POST action=/cfg>
-<h3>Pantalla</h3>
-Modo: <select name=mode>
-<option value=0 %M0%>Rotaci&oacute;n</option>
-<option value=1 %M1%>Tamagotchi</option>
-<option value=2 %M2%>Reloj</option></select>
-&nbsp; Rotar cada <input name=rot size=3 value=%ROT%> s<br><br>
-Brillo: <input type=range name=brt min=5 max=100 value=%BRT%><br><br>
-Zona horaria (POSIX): <input name=tz size=30 value="%TZ%"><br><br>
-<h3>Claude</h3>
-Consultar cada <input name=poll size=3 value=%POLL%> min<br><br>
-<h3>Seguridad</h3>
-Password web UI: <input name=webpass value="%WP%"><br>
-<small>Tras cambiarla, reinicia el cubo para que se aplique tambi&eacute;n a /update.</small><br><br>
-<input type=submit value="Guardar ajustes">
-</form>
-<h3>Iniciar sesi&oacute;n con Claude (sin ordenador)</h3>
+<div class=card>
+<h2>Uso de Claude</h2>
+<div class=q><span>5 horas</span><span>%P5%%</span></div>
+<div class=bar><span style="width:%P5%%;background:%C5%"></span></div>
+<div class=q><span>Semana</span><span>%P7%%</span></div>
+<div class=bar><span style="width:%P7%%;background:%C7%"></span></div>
+<div class=muted>Heap libre: %HEAP% B</div>
+</div>
+<form method=POST action=/cfg><div class=card>
+<h2>Ajustes</h2>
+<label>Pantalla</label>
+<select name=mode><option value=0 %M0%>Rotaci&oacute;n autom&aacute;tica</option><option value=1 %M1%>Solo tamagotchi</option><option value=2 %M2%>Solo reloj</option></select>
+<div class=row><div><label>Rotar cada (s)</label><input name=rot value=%ROT%></div><div><label>Consultar (min)</label><input name=poll value=%POLL%></div></div>
+<label>Brillo</label><input type=range name=brt min=5 max=100 value=%BRT%>
+<label>Zona horaria (POSIX)</label><input name=tz value="%TZ%">
+<label>Contrase&ntilde;a web &mdash; usuario: admin</label><input name=webpass value="%WP%">
+<div class=muted>Reinicia el cubo para aplicar la contrase&ntilde;a tambi&eacute;n a /update.</div>
+<button>Guardar ajustes</button>
+</div></form>
+<div class=card>
+<h2>Sesi&oacute;n de Claude</h2>
 %OAUTHMSG%
-<p>1. <a href=/oauth/start target=_blank %OAUTHDIS%>Abrir login de Claude</a> desde el m&oacute;vil, inicia sesi&oacute;n y copia el c&oacute;digo que te da.</p>
+<a class="btn ghost" href=/oauth/start target=_blank %OAUTHDIS%>1 &middot; Abrir login de Claude</a>
 <form method=POST action=/oauth/finish>
-2. Pega aqu&iacute; el c&oacute;digo: <input name=code size=40 %OAUTHDIS%><br><br>
-<input type=submit value="Iniciar sesi&oacute;n" %OAUTHDIS%>
+<label>2 &middot; Pega el c&oacute;digo que te da Claude</label>
+<input name=code %OAUTHDIS%>
+<button %OAUTHDIS%>Iniciar sesi&oacute;n</button>
 </form>
-<form method=POST action=/token>
-<h3>Token de Claude (alternativa manual)</h3>
+<details><summary>Alternativa: pegar token manual</summary>
 %TOKMSG%
-<p>En tu ordenador: <code>claude setup-token</code> y pega aqu&iacute; el resultado.
-O pega un refresh token para renovaci&oacute;n autom&aacute;tica.</p>
-Access: <input name=access size=40><br><br>
-Refresh (opcional): <input name=refresh size=40><br><br>
-<input type=submit value="Guardar token" %TOKDIS%>
-</form>
-<p><a href=/log style="color:#8cf">log</a> &middot; <a href=/update style="color:#8cf">actualizar firmware</a></p>)";
+<form method=POST action=/token>
+<label>Access token (de <code>claude setup-token</code>)</label><input name=access>
+<label>Refresh token (opcional)</label><input name=refresh>
+<button %TOKDIS%>Guardar token</button>
+</form></details>
+</div>
+<div class=foot><a href=/log>Registro</a> &middot; <a href=/update>Actualizar firmware</a></div>
+</div></body>)";
 
 inline bool webAuth(ESP8266WebServer& s, const Config& c) {
   if (!c.webPass[0]) return true;
   if (s.authenticate("admin", c.webPass)) return true;
   s.requestAuthentication();
   return false;
+}
+
+// Color de la barra de cuota por nivel (mismos tramos que el humor de la
+// mascota): verde <50, ambar <75, naranja <90, rojo >=90.
+inline const char* barColor(uint8_t pct) {
+  if (pct >= 90) return "#e2574d";
+  if (pct >= 75) return "#d97757";
+  if (pct >= 50) return "#d9a441";
+  return "#5fb872";
 }
 
 // quotaNow: la última QuotaSnapshot que mantiene el loop principal (task 14).
@@ -78,21 +114,22 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
     p.replace("%M0%", cfg.screenMode == 0 ? "selected" : "");
     p.replace("%M1%", cfg.screenMode == 1 ? "selected" : "");
     p.replace("%M2%", cfg.screenMode == 2 ? "selected" : "");
+    p.replace("%C5%", barColor(quotaNow.pct5h)); p.replace("%C7%", barColor(quotaNow.pctWeek));
     p.replace("%ROT%", String(cfg.rotateSeconds)); p.replace("%BRT%", String(cfg.brightness));
     p.replace("%POLL%", String(cfg.pollMinutes));
     p.replace("%SAFEMODE%", safeMode ?
-      "<p style=color:#f88><b>MODO SEGURO</b> tras 3 crashes. Desenchufa y vuelve a enchufar para reintentar el arranque normal, o sube un firmware corregido en /update.</p>" : "");
+      "<div class=warn><b>Modo seguro</b> tras 3 crashes. Se reintentar&aacute; el arranque normal en unos segundos, o sube un firmware corregido en /update.</div>" : "");
     if (cfg.webPass[0]) {
       p.replace("%TOKMSG%", authBad ?
-        "<p style=color:#f88>Token invalido o caducado sin refresh posible. Pega uno nuevo abajo.</p>" : "");
+        "<div class=warn>Token inv&aacute;lido o caducado sin refresh. Inicia sesi&oacute;n de nuevo o pega uno nuevo.</div>" : "");
       p.replace("%TOKDIS%", "");
       p.replace("%OAUTHMSG%", oauthPending ?
-        "<p style=color:#8cf>Procesando login&hellip; recarga esta p&aacute;gina en unos segundos.</p>" : "");
+        "<div class=warn>Procesando login&hellip; recarga esta p&aacute;gina en unos segundos.</div>" : "");
       p.replace("%OAUTHDIS%", "");
     } else {
-      p.replace("%TOKMSG%", "<p style=color:#f88>Configura primero una contrase&ntilde;a arriba y guarda para poder guardar el token.</p>");
+      p.replace("%TOKMSG%", "<div class=warn>Configura y guarda una contrase&ntilde;a arriba primero.</div>");
       p.replace("%TOKDIS%", "disabled");
-      p.replace("%OAUTHMSG%", "<p style=color:#f88>Configura primero una contrase&ntilde;a arriba y guarda para poder iniciar sesi&oacute;n.</p>");
+      p.replace("%OAUTHMSG%", "<div class=warn>Configura y guarda una contrase&ntilde;a arriba primero.</div>");
       p.replace("%OAUTHDIS%", "disabled");
     }
     // Texto libre de usuario al final y escapado: evita tanto XSS (< > " &)
