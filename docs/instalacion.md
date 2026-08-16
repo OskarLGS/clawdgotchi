@@ -29,10 +29,11 @@ CLAWD_WEB_AUTH=admin:clave tools/flash-ota.sh   # si la web UI tiene password
 `/spike?token=<token de \`claude setup-token\`>` prueba NTP + MFLN + TLS pineado
 (`src/certs.h`: GTS Root R4 para api.anthropic.com, ISRG Root YE para
 platform.claude.com) + POST mínimo a `api.anthropic.com/v1/messages`.
-Desplegado y verificado sin token (`/spike` → `400 falta ?token=`, `/` sigue
-vivo, heap=46856 maxblock=46344 tras el flasheo). Falta la ejecución con
-token real (la hace el usuario) para medir `mfln`, `maxblock` antes/después
-y `code=200` con las cabeceras de cuota — pendiente de anotar aquí.
+Resultado con token real (2026-08-16): **code=200 con las 5 cabeceras de
+cuota** (5h=0.12, 7d=0.18). `mfln1024=0` (el servidor rechaza MFLN) →
+buffers definitivos **RX=16384, TX=512**. Heap: maxblock 35656 antes del
+handshake, 13024 en el punto más bajo — margen suficiente. Checkpoint
+superado.
 
 ## Recuperación
 
