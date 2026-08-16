@@ -2,7 +2,7 @@
 #include <Arduino.h>
 // Log en RAM visible por web: en el Ultra no hay chip USB-serial.
 class NetLog {
-  static const size_t CAP = 3000;
+  static const size_t CAP = 1200;  // ring pequeño: menos heap y menos fragmentacion (el TLS necesita bloque contiguo)
   String buf;
 public:
   void line(const String& s) {

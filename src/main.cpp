@@ -168,9 +168,12 @@ void loop() {
   // siquiera validaria los certificados.
   if (oauthPending && ntpVisto) {
     oauthPending = false;
-    static Tokens tmp;  // static: ~2.6KB, no cabe en la pila de loop()
-    if (oauthExchange(g_pendingCode, tmp)) {
-      g_tokens = tmp;
+    // Canjea directo sobre g_tokens (el unico buffer Tokens del firmware): si
+    // el canje falla, oauthExchange no toca out hasta tener respuesta valida,
+    // y g_tokens se recarga con loadTokens() en el proximo runPoll de todos
+    // modos. Evita un segundo Tokens estatico de 2.6KB que dejaba al arranque
+    // sin heap contiguo para el resto.
+    if (oauthExchange(g_pendingCode, g_tokens)) {
       saveTokens(g_tokens);
       authBad = false;
       pollPedido = true;

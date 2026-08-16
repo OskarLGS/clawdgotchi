@@ -14,7 +14,19 @@ static void tlsClient(BearSSL::WiFiClientSecure& c, BearSSL::X509List& roots) {
   c.setBufferSizes(RX_BUF, TX_BUF);
 }
 
+// El handshake BearSSL necesita un bloque contiguo grande (RX 16KB + estructuras).
+// Si el heap fragmentado no lo tiene, intentarlo revienta el firmware (crash-loop).
+// Mejor abortar limpiamente y reintentar en el siguiente ciclo. 20KB deja margen
+// sobre los ~16-18KB medidos como minimo del handshake.
+bool tlsHeapOk(const char* who) {
+  uint32_t blk = ESP.getMaxFreeBlockSize();
+  if (blk >= 20000) return true;
+  LOGN("%s: heap bajo (%u), salto TLS", who, blk);
+  return false;
+}
+
 PollStatus pollQuota(const char* accessToken, QuotaSnapshot& out) {
+  if (!tlsHeapOk("poll")) return PollStatus::NET_ERROR;
   BearSSL::WiFiClientSecure client;
   BearSSL::X509List roots(CA_ROOTS);
   tlsClient(client, roots);
@@ -40,7 +52,7 @@ PollStatus pollQuota(const char* accessToken, QuotaSnapshot& out) {
     st = ok ? PollStatus::OK : PollStatus::NET_ERROR;
   } else if (code == 401 || code == 403) st = PollStatus::AUTH_FAILED;
   else st = PollStatus::NET_ERROR;
-  LOGN("poll code=%d 5h=%u%% 7d=%u%%", code, out.pct5h, out.pctWeek);
+  LOGN("poll code=%d 5h=%u%% 7d=%u%% blk=%u", code, out.pct5h, out.pctWeek, ESP.getMaxFreeBlockSize());
   http.end();
   return st;
 }
@@ -51,6 +63,7 @@ bool refreshTokens(Tokens& t) {
   // (epoca ~1970) y el chequeo de "quedan <5 min" de loop() dispararia sin
   // parar. No reintenta: loop() ya evita llamar aqui hasta que NTP sincronice.
   if (time(nullptr) < 1600000000) { LOGN("refresh omitido: sin NTP"); return false; }
+  if (!tlsHeapOk("refresh")) return false;
   BearSSL::WiFiClientSecure client;
   BearSSL::X509List roots(CA_ROOTS);
   tlsClient(client, roots);

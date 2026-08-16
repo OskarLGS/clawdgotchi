@@ -8,6 +8,7 @@
 #include "store.h"
 #include "certs.h"
 #include "netlog.h"
+#include "claude_client.h"  // tlsHeapOk()
 
 // Login OAuth PKCE dentro del cubo (Task 16): el usuario abre /oauth/start en
 // el movil, hace login en claude.ai y pega el codigo que le devuelven en
@@ -97,6 +98,7 @@ inline bool oauthExchange(const String& codeInput, Tokens& out) {
   if (hash >= 0) { code = codeInput.substring(0, hash); state = codeInput.substring(hash + 1); }
   code.trim(); state.trim();
   if (!code.length()) { LOGN("oauth: code vacio"); return false; }
+  if (!tlsHeapOk("oauth")) return false;
 
   JsonDocument req;
   req["grant_type"] = "authorization_code";
