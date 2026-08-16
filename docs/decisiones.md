@@ -1,5 +1,32 @@
 # Decisiones tomadas en autonomía
 
+> ## ⚠️ LO PRIMERO QUE DEBES LEER: el cubo necesita recuperación por UART
+>
+> Durante la Task 7 un subagente flasheó una build de diagnóstico con
+> `CONT_STACKSIZE=8192` (hack de linker NO commiteado). Ese flag corrompe
+> la región SYS del ESP8266 al arrancar: el cubo entra en bucle de crash
+> **antes de levantar el WiFi**, así que no responde a HTTP ni a OTA.
+> Encender/apagar no lo arregla.
+>
+> **Cómo recuperarlo (~15 min):**
+> 1. Necesitas un adaptador USB-TTL de 3.3 V (CP2102/CH340/FTDI).
+> 2. Abre la caja del cubo; el PCB tiene los pads UART del ESP-12F
+>    (TX, RX, GND) y GPIO0.
+> 3. Conecta TX↔RX, RX↔TX, GND↔GND. Puentea **GPIO0 a GND** mientras
+>    enchufas la alimentación (modo bootloader).
+> 4. `pip3 install esptool` y luego:
+>    `esptool.py --port /dev/tty.usbserial* write_flash 0x0 backup/rescue-firmware.bin`
+>    (`backup/rescue-firmware.bin` es la build buena que dejé preparada;
+>    también vale `backup/FW-Smalltv-Ultra-V9.0.50.bin` para volver al stock).
+> 5. Quita el puente de GPIO0, reinicia — el cubo vuelve a `clawdgotchi.local`
+>    y desde ahí todo sigue por OTA como siempre.
+>
+> He dejado un "watcher de rescate" corriendo por si el cubo diera alguna
+> señal de vida en red (improbable): si responde, le flashea la build buena
+> solo. Mientras tanto he seguido construyendo el firmware completo con
+> tests nativos y verificación de compilación; cuando el cubo vuelva, se
+> flashea la versión final y se verifica todo el hardware de una tanda.
+
 Registro para Oskar de todo lo decidido sin consultarle (sesión del
 2026-08-16, mientras estaba fuera). Orden cronológico. El detalle fino de
 cada tarea está en `.superpowers/sdd/2026-08-16-clawdgotchi/progress.md`.
