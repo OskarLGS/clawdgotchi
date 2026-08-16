@@ -34,28 +34,19 @@ BG = None  # celda vacia -> fondo negro puro (color-key de transparencia)
 
 
 # --- forma del cuerpo --------------------------------------------------
-# Semi-anchura (en pixeles logicos) por fila, centrada entre las columnas
-# 11 y 12 (rejilla de 24 columnas). Da una gota/lagrima redondeada.
-BODY_HALF_WIDTH = {
-    4: 1, 5: 3, 6: 5, 7: 6, 8: 7, 9: 8, 10: 8, 11: 9, 12: 9, 13: 9,
-    14: 9, 15: 8, 16: 8, 17: 7, 18: 6, 19: 5,
-}
-# Patitas tipo pinza: dos muñones bajo el cuerpo, mas juntos en la fila
-# inferior para sugerir una pinza.
-LEG_ROWS = {
-    20: [(8, 10), (13, 15)],
-    21: [(8, 9), (14, 15)],
-}
+# Silueta del Clawd oficial ("Welcome, Claw'd"): cuerpo rectangular ancho
+# con esquinas recortadas, dos orejas/muñones cuadrados arriba y cuatro
+# patitas cortas abajo.
+EARS = [(3, 5, 4, 7), (3, 5, 16, 19)]        # (r0, r1, c0, c1)
+BODY = [(6, 6, 3, 20), (7, 15, 2, 21), (16, 16, 3, 20)]
+LEGS = [(17, 19, 4, 5), (17, 19, 9, 10), (17, 19, 13, 14), (17, 19, 18, 19)]
 
 
 def build_mask():
     """Devuelve un set de (row, col) con las celdas que son "cuerpo"."""
     cells = set()
-    for row, half in BODY_HALF_WIDTH.items():
-        for col in range(12 - half, 12 + half):
-            cells.add((row, col))
-    for row, spans in LEG_ROWS.items():
-        for c0, c1 in spans:
+    for r0, r1, c0, c1 in EARS + BODY + LEGS:
+        for row in range(r0, r1 + 1):
             for col in range(c0, c1 + 1):
                 cells.add((row, col))
     return cells
@@ -64,8 +55,8 @@ def build_mask():
 MASK = build_mask()
 
 # Zona (arriba-izquierda del cuerpo) donde se talla el parche de luz.
-HILITE_ROWS = range(6, 12)
-HILITE_COLS = range(6, 12)
+HILITE_ROWS = range(7, 12)
+HILITE_COLS = range(4, 10)
 
 
 def shade_body(base, shadow, hilite):
@@ -113,14 +104,15 @@ def shift(canvas, dr, dc):
     return out
 
 
+# Ojos cuadrados del Clawd oficial: bloques 3x3 bien separados.
 def eyes_open(canvas, color=INK):
-    paint_rect(canvas, 10, 11, 8, 9, color)
-    paint_rect(canvas, 10, 11, 14, 15, color)
+    paint_rect(canvas, 8, 10, 5, 7, color)
+    paint_rect(canvas, 8, 10, 16, 18, color)
 
 
 def eyes_closed(canvas, color=INK):
-    paint(canvas, [(11, 8), (11, 9)], color)
-    paint(canvas, [(11, 14), (11, 15)], color)
+    paint(canvas, [(10, 5), (10, 6), (10, 7)], color)
+    paint(canvas, [(10, 16), (10, 17), (10, 18)], color)
 
 
 def zzz_glyph(canvas, r, c, color):
@@ -133,12 +125,8 @@ def zzz_glyph(canvas, r, c, color):
 # --- una funcion "draw" por humor: (frame) -> canvas 24x24 -------------
 def draw_happy(frame):
     c = new_body()
-    # ojos "^ ^" felices
-    paint(c, [(10, 8), (9, 9), (10, 10)], INK)
-    paint(c, [(10, 14), (9, 15), (10, 16)], INK)
-    # sonrisa: comisuras arriba, centro abajo
-    paint(c, [(13, 10), (13, 13)], INK)
-    paint(c, [(14, 11), (14, 12)], INK)
+    # fiel a la referencia oficial: ojos cuadrados abiertos, sin boca
+    eyes_open(c)
     if frame == 1:
         c = shift(c, dr=-1, dc=0)  # rebote hacia arriba
     return c
@@ -150,39 +138,39 @@ def draw_uneasy(frame):
         eyes_open(c)
     else:
         eyes_closed(c)  # parpadeo
-    paint(c, [(14, 10), (14, 11), (14, 12), (14, 13)], INK)  # boca recta
-    drop_row = 6 if frame == 0 else 7  # una gota que resbala
-    paint(c, [(drop_row, 18), (drop_row + 1, 18), (drop_row + 1, 19)], SWEAT)
+    paint(c, [(13, 10), (13, 11), (13, 12), (13, 13)], INK)  # boca recta
+    drop_row = 4 if frame == 0 else 5  # una gota que resbala junto a la oreja
+    paint(c, [(drop_row, 21), (drop_row + 1, 21), (drop_row + 1, 22)], SWEAT)
     return c
 
 
 def draw_stressed(frame):
     c = new_body()
     # cejas preocupadas, inclinadas hacia el centro
-    paint(c, [(8, 7), (9, 8)], INK)
-    paint(c, [(8, 17), (9, 16)], INK)
+    paint(c, [(7, 5), (7, 6), (6, 7)], INK)
+    paint(c, [(6, 16), (7, 17), (7, 18)], INK)
     eyes_open(c)
     # boca ondulada (zigzag)
-    paint(c, [(14, 10), (13, 11), (14, 12), (13, 13)], INK)
-    drop_row = 6 if frame == 0 else 7  # dos gotas cayendo
-    paint(c, [(drop_row, 5), (drop_row + 1, 5), (drop_row + 1, 6)], SWEAT)
-    paint(c, [(drop_row, 18), (drop_row + 1, 18), (drop_row + 1, 19)], SWEAT)
+    paint(c, [(13, 10), (12, 11), (13, 12), (12, 13)], INK)
+    drop_row = 4 if frame == 0 else 5  # dos gotas cayendo
+    paint(c, [(drop_row, 1), (drop_row + 1, 1), (drop_row + 1, 2)], SWEAT)
+    paint(c, [(drop_row, 21), (drop_row + 1, 21), (drop_row + 1, 22)], SWEAT)
     return c
 
 
 def draw_panic(frame):
     c = new_body()
-    # ojos muy abiertos (3x3) con brillo interior
-    paint_rect(c, 9, 11, 7, 9, INK)
-    paint_rect(c, 9, 11, 14, 16, INK)
-    paint(c, [(9, 8)], HILITE)
-    paint(c, [(9, 15)], HILITE)
-    # boca abierta (ovalo relleno)
-    paint_rect(c, 13, 15, 10, 13, INK)
+    # ojos muy abiertos (4x3) con brillo interior
+    paint_rect(c, 7, 10, 5, 7, INK)
+    paint_rect(c, 7, 10, 16, 18, INK)
+    paint(c, [(8, 6)], HILITE)
+    paint(c, [(8, 17)], HILITE)
+    # boca abierta (rectangulo relleno)
+    paint_rect(c, 12, 14, 10, 13, INK)
     # gotas volando lejos del cuerpo
-    paint(c, [(7, 2), (8, 2)], SWEAT)
-    paint(c, [(6, 21), (7, 21)], SWEAT)
-    paint(c, [(3, 12)], SWEAT)
+    paint(c, [(8, 0), (9, 0)], SWEAT)
+    paint(c, [(7, 23), (8, 23)], SWEAT)
+    paint(c, [(1, 11)], SWEAT)
     if frame == 1:
         c = shift(c, dr=0, dc=-1)  # temblor lateral
     return c
@@ -191,13 +179,13 @@ def draw_panic(frame):
 def draw_sleeping(frame):
     c = new_body()
     eyes_closed(c)
-    paint(c, [(14, 11), (14, 12)], INK)  # boca neutra
+    paint(c, [(13, 11), (13, 12)], INK)  # boca neutra
     if frame == 0:
-        zzz_glyph(c, 0, 15, ZZZ)
-        zzz_glyph(c, 2, 19, ZZZ)
+        zzz_glyph(c, 0, 10, ZZZ)
+        zzz_glyph(c, 0, 20, ZZZ)
     else:
-        zzz_glyph(c, 1, 16, ZZZ)  # Zzz "flotando" (desplazada)
-        zzz_glyph(c, 3, 20, ZZZ)
+        zzz_glyph(c, 0, 12, ZZZ)  # Zzz "flotando" (desplazada)
+        zzz_glyph(c, 1, 21, ZZZ)
     return c
 
 
@@ -205,13 +193,13 @@ def draw_offline(frame):
     c = new_body_gray()
     if frame == 0:
         # ojos en X (apagados)
-        paint(c, [(9, 7), (10, 8), (11, 9)], GRAY_INK)
-        paint(c, [(9, 9), (10, 8), (11, 7)], GRAY_INK)
-        paint(c, [(9, 13), (10, 14), (11, 15)], GRAY_INK)
-        paint(c, [(9, 15), (10, 14), (11, 13)], GRAY_INK)
+        paint(c, [(8, 5), (9, 6), (10, 7)], GRAY_INK)
+        paint(c, [(8, 7), (9, 6), (10, 5)], GRAY_INK)
+        paint(c, [(8, 16), (9, 17), (10, 18)], GRAY_INK)
+        paint(c, [(8, 18), (9, 17), (10, 16)], GRAY_INK)
     else:
         eyes_closed(c, color=GRAY_INK)  # parpadeo tenue
-    paint(c, [(14, 11), (14, 12)], GRAY_INK)
+    paint(c, [(13, 11), (13, 12)], GRAY_INK)
     return c
 
 
