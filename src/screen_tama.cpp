@@ -92,10 +92,10 @@ void drawTamagotchi(const QuotaSnapshot& q, Mood m, uint32_t nowEpoch, uint8_t f
     else          snprintf(cd5h, sizeof cd5h, "5h (%s)", c);
     formatCountdown(nowEpoch, q.resetWeek, c, sizeof c);
     if (sleeping) snprintf(cdWk, sizeof cdWk, "despierta en %s", c);
-    else          snprintf(cdWk, sizeof cdWk, "semana (%s)", c);
+    else          snprintf(cdWk, sizeof cdWk, "Semanal (%s)", c);
   } else {
     snprintf(cd5h, sizeof cd5h, "5h  --");
-    snprintf(cdWk, sizeof cdWk, "semana  --");
+    snprintf(cdWk, sizeof cdWk, "Semanal  --");
   }
 
   bool changed = s_force || !s_last.valid || s_last.mood != m ||
