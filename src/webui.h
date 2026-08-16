@@ -6,11 +6,17 @@
 #include "htmlutil.h"
 #include "display.h"
 
+// Definidas en main.cpp; el orquestador (task 14) es quien conoce el estado
+// real de arranque y de autenticacion con Claude.
+extern bool safeMode;
+extern bool authBad;
+
 static const char SETTINGS_HTML[] PROGMEM = R"(<!doctype html><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>Clawdgotchi</title>
 <body style="font-family:sans-serif;background:#222;color:#eee;max-width:34em;margin:2em auto">
 <h2>&#129408; Clawdgotchi</h2>
+%SAFEMODE%
 <p>5h: %P5%% &middot; semana: %P7%% &middot; heap %HEAP%</p>
 <form method=POST action=/cfg>
 <h3>Pantalla</h3>
@@ -58,8 +64,11 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
     p.replace("%M2%", cfg.screenMode == 2 ? "selected" : "");
     p.replace("%ROT%", String(cfg.rotateSeconds)); p.replace("%BRT%", String(cfg.brightness));
     p.replace("%POLL%", String(cfg.pollMinutes));
+    p.replace("%SAFEMODE%", safeMode ?
+      "<p style=color:#f88><b>MODO SEGURO</b>: 3 reinicios por fallo seguidos. Solo web UI y /update; pantalla y consultas a Claude desactivadas. Reflashea o espera 60s estables para recuperar el arranque normal.</p>" : "");
     if (cfg.webPass[0]) {
-      p.replace("%TOKMSG%", "");
+      p.replace("%TOKMSG%", authBad ?
+        "<p style=color:#f88>Token invalido o caducado sin refresh posible. Pega uno nuevo abajo.</p>" : "");
       p.replace("%TOKDIS%", "");
     } else {
       p.replace("%TOKMSG%", "<p style=color:#f88>Configura primero una contrase&ntilde;a arriba y guarda para poder guardar el token.</p>");
@@ -94,6 +103,7 @@ inline void webuiRoutes(ESP8266WebServer& s, Config& cfg, QuotaSnapshot& quotaNo
     if (s.arg("access").length())  snprintf(t.access, sizeof t.access, "%s", s.arg("access").c_str());
     if (s.arg("refresh").length()) snprintf(t.refresh, sizeof t.refresh, "%s", s.arg("refresh").c_str());
     saveTokens(t);
+    authBad = false;  // token nuevo: da otra oportunidad antes de volver a marcarlo
     s.sendHeader("Location", "/");
     s.send(303);
   });

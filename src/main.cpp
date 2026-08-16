@@ -12,6 +12,7 @@
 #include "display.h"
 #include "screen_tama.h"
 #include "screen_clock.h"
+#include "safemode.h"
 
 NetLog netlog;
 ESP8266WebServer server(80);
@@ -19,15 +20,32 @@ QuotaSnapshot quotaNow;
 Config cfg;
 static bool pollPedido = false;
 static uint32_t lastPollOk = 0;
-// -1 = sin forzar (humor real); 0..5 = índice de Mood forzado por /demo.
-// Ruta de debug temporal para probar los 6 humores en pantalla; T14 la retira.
-static int demoMood = -1;
-// Demo de pantalla reloj (T14 lo sustituye por cfg.screenMode).
-static bool demoClock = false;
+// Modo seguro (3 crashes seguidos, ver safemode.h): solo web UI + /update,
+// sin pantalla ni consultas a Claude. Leido tambien por webui.h (extern).
+bool safeMode = false;
+// true cuando pollQuota devuelve AUTH_FAILED y un intento de refresh no lo
+// arregla. Se limpia con un poll OK o al guardar un token nuevo en /token
+// (webui.h). Leido tambien por webui.h (extern) para avisar en la web UI.
+bool authBad = false;
 
 void setup() {
   LittleFS.begin();
   loadConfig(cfg);
+  if (safeModeRequested()) {
+    safeMode = true;
+    wifiConnectOrPortal(cfg);
+    MDNS.begin("clawdgotchi");
+    webuiRoutes(server, cfg, quotaNow);
+    server.on("/log", [] {
+      if (!webAuth(server, cfg)) return;
+      server.send(200, "text/plain", netlog.text());
+    });
+    otaBegin(server, cfg);
+    server.begin();
+    MDNS.addService("http", "tcp", 80);
+    LOGN("MODO SEGURO: 3 reinicios por fallo seguidos");
+    return;  // sin display ni poll
+  }
   wifiConnectOrPortal(cfg);
   displayBegin(cfg.brightness);
   MDNS.begin("clawdgotchi");
@@ -49,75 +67,137 @@ void setup() {
     if (!webAuth(server, cfg)) return;
     server.send(200, "text/plain", String("valid=") + quotaNow.valid + " 5h=" + quotaNow.pct5h +
                 "% 7d=" + quotaNow.pctWeek + "% exhausted=" + quotaNow.exhausted +
-                " lastPollOk=" + lastPollOk);
-  });
-  // Debug temporal (task 12/13): fuerza humor o pantalla en demo.
-  // GET /demo?mood=0..5 (HAPPY..OFFLINE): fuerza humor en pantalla tamagotchi.
-  // GET /demo?clock=1: activa demo de pantalla reloj (localtime con TZ de config).
-  // Sin argumentos: desactiva demos. Se retira en la task 14.
-  server.on("/demo", [] {
-    if (!webAuth(server, cfg)) return;
-    // Limpia pantalla y invalida ambos modos en cualquier cambio
-    tft.fillScreen(TFT_BLACK);
-    clockInvalidate();
-    tamaInvalidate();
-    if (server.hasArg("clock")) {
-      demoClock = server.arg("clock").toInt() != 0;
-      demoMood = -1;  // desactiva mood si activamos clock
-      server.send(200, "text/plain", String("demoClock=") + (demoClock ? "true" : "false"));
-    } else if (server.hasArg("mood")) {
-      int v = server.arg("mood").toInt();
-      demoMood = (v >= 0 && v <= 5) ? v : -1;
-      demoClock = false;  // desactiva clock si activamos mood
-      server.send(200, "text/plain", String("demoMood=") + demoMood);
-    } else {
-      demoMood = -1;
-      demoClock = false;
-      server.send(200, "text/plain", "demos off");
-    }
+                " lastPollOk=" + lastPollOk + " authBad=" + authBad);
   });
   otaBegin(server, cfg);
   server.begin();
   MDNS.addService("http", "tcp", 80);
 }
 
+// Planificador de poll: intervalo cfg.pollMinutes, con backoff exponencial
+// 1,2,4,...,32 min mientras pollQuota devuelva NET_ERROR (se resetea a 1 en
+// cuanto un poll sale OK). /poll fuerza un poll inmediato via pollPedido.
+static void runPoll(uint32_t nowMs, bool ntpVisto) {
+  static uint32_t nextPollMs = 0;
+  static uint32_t backoffMin = 1;
+  bool due = ntpVisto && (int32_t)(nowMs - nextPollMs) >= 0;
+  if (!pollPedido && !due) return;
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  if (!ntpVisto) {
+    // Solo se llega aqui via /poll (pollPedido): un poll programado nunca
+    // dispara sin NTP, ver ntpVisto en loop(). Espera acotada, una unica vez
+    // por arranque hasta que sincronice (o se agote el margen y se reintente
+    // el siguiente ciclo) - no bloquea handleClient() en cada poll.
+    time_t now = 0;
+    for (int i = 0; i < 40 && (now = time(nullptr)) < 1600000000; i++) delay(250);
+    if (now < 1600000000) {
+      pollPedido = true;  // reintenta el proximo loop
+      LOGN("poll aplazado: sin NTP");
+      return;
+    }
+  }
+  pollPedido = false;
+
+  static Tokens t;  // ponytail: fuera de la pila de loop(), ver store.h
+  if (!loadTokens(t)) {
+    LOGN("loadTokens fallo en loop");
+    nextPollMs = nowMs + (uint32_t)cfg.pollMinutes * 60000UL;
+    return;
+  }
+
+  if (t.expiresAt > 0 && t.refresh[0]) {
+    int32_t remaining = (int32_t)(t.expiresAt - (uint32_t)time(nullptr));
+    if (remaining < 300) {
+      if (refreshTokens(t)) saveTokens(t);
+    }
+  }
+
+  PollStatus st = pollQuota(t.access, quotaNow);
+  if (st == PollStatus::AUTH_FAILED) {
+    bool recovered = t.refresh[0] && refreshTokens(t) && saveTokens(t) &&
+                      pollQuota(t.access, quotaNow) == PollStatus::OK;
+    authBad = !recovered;
+    if (recovered) st = PollStatus::OK;
+  }
+  LOGN("poll st=%d 5h=%u%% 7d=%u%%", (int)st, quotaNow.pct5h, quotaNow.pctWeek);
+
+  if (st == PollStatus::OK) {
+    lastPollOk = (uint32_t)time(nullptr);
+    authBad = false;
+    backoffMin = 1;
+    nextPollMs = nowMs + (uint32_t)cfg.pollMinutes * 60000UL;
+  } else if (st == PollStatus::NET_ERROR) {
+    nextPollMs = nowMs + backoffMin * 60000UL;
+    if (backoffMin < 32) backoffMin *= 2;
+  } else {  // AUTH_FAILED persistente: no machacar, reintenta en el ciclo normal
+    nextPollMs = nowMs + (uint32_t)cfg.pollMinutes * 60000UL;
+  }
+}
+
 void loop() {
   server.handleClient();
   MDNS.update();
-  if (pollPedido && WiFi.status() == WL_CONNECTED) {
-    pollPedido = false;
-    static Tokens t;  // ponytail: fuera de la pila de loop(), ver store.h
-    if (loadTokens(t)) {
-      time_t now = 0;
-      for (int i = 0; i < 40 && (now = time(nullptr)) < 1600000000; i++) delay(250);
-      if (now < 1600000000) {
-        // NTP no sincronizo a tiempo: no pollear con reloj en epoca (rompe
-        // formatCountdown en pantalla). Reintenta en el siguiente ciclo.
-        pollPedido = true;
-        LOGN("poll aplazado: sin NTP");
-      } else {
-        PollStatus st = pollQuota(t.access, quotaNow);
-        if (st == PollStatus::OK) lastPollOk = (uint32_t)time(nullptr);
-        LOGN("poll st=%d 5h=%u%% 7d=%u%%", (int)st, quotaNow.pct5h, quotaNow.pctWeek);
-      }
-    }
-  }
+  if (safeMode) return;
+
+  uint32_t nowMs = millis();
+
+  // Una vez sincronizado NTP no hace falta volver a comprobarlo: evita el
+  // time(nullptr) redundante y sobre todo evita repetir la espera bloqueante
+  // de runPoll() en cada poll (solo ocurre mientras ntpVisto es false).
+  static bool ntpVisto = false;
+  if (!ntpVisto && time(nullptr) >= 1600000000) ntpVisto = true;
+
+  runPoll(nowMs, ntpVisto);
+
+  static bool healthMarked = false;
+  if (!healthMarked && millis() > 60000) { markBootHealthy(); healthMarked = true; }
+
   static uint32_t lastFrameMs = 0;
   static uint8_t frame = 0;
-  uint32_t nowMs = millis();
   if (nowMs - lastFrameMs >= 500) {
     lastFrameMs = nowMs;
     frame ^= 1;
+
+    // currentScreen: 0=tama 1=reloj. En screenMode 0 alterna segun
+    // cfg.rotateSeconds; cfg se lee en vivo asi que /cfg surte efecto sin
+    // reiniciar. Un unico flag detecta cualquier cambio (modo o rotacion) y
+    // dispara el repintado completo solo al conmutar.
+    int currentScreen;
+    if (cfg.screenMode == 1) currentScreen = 0;
+    else if (cfg.screenMode == 2) currentScreen = 1;
+    else {
+      uint32_t rotSec = cfg.rotateSeconds ? cfg.rotateSeconds : 15;
+      currentScreen = (int)((nowMs / 1000 / rotSec) % 2);
+    }
+    static int lastScreen = -1;
+    if (currentScreen != lastScreen) {
+      lastScreen = currentScreen;
+      tft.fillScreen(TFT_BLACK);
+      clockInvalidate();
+      tamaInvalidate();
+    }
+
     time_t now = time(nullptr);
-    if (demoClock) {
+    if (currentScreen == 1) {
       struct tm lt;
       localtime_r(&now, &lt);
       drawClock(lt);
     } else {
-      Mood m = moodFor(quotaNow, WiFi.status() == WL_CONNECTED);
-      if (demoMood >= 0) m = (Mood)demoMood;
+      Mood m = moodFor(quotaNow, WiFi.status() == WL_CONNECTED && !authBad);
       drawTamagotchi(quotaNow, m, (uint32_t)now, frame);
     }
+
+    static bool lastAuthBad = false;
+    if (authBad) {
+      tft.setTextDatum(TR_DATUM);
+      tft.setTextColor(TFT_RED, TFT_BLACK);
+      tft.drawString("!", 238, 2, 2);
+      tft.setTextDatum(TL_DATUM);
+    } else if (lastAuthBad) {
+      tft.fillRect(220, 0, 20, 18, TFT_BLACK);  // borra el "!" al recuperarse
+    }
+    lastAuthBad = authBad;
   }
   delay(2);
 }

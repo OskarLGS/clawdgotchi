@@ -47,6 +47,10 @@ PollStatus pollQuota(const char* accessToken, QuotaSnapshot& out) {
 
 bool refreshTokens(Tokens& t) {
   if (!t.refresh[0]) return false;
+  // Guard NTP: sin hora real, expiresAt = time(nullptr)+ttl saldria basura
+  // (epoca ~1970) y el chequeo de "quedan <5 min" de loop() dispararia sin
+  // parar. No reintenta: loop() ya evita llamar aqui hasta que NTP sincronice.
+  if (time(nullptr) < 1600000000) { LOGN("refresh omitido: sin NTP"); return false; }
   BearSSL::WiFiClientSecure client;
   BearSSL::X509List roots(CA_ROOTS);
   tlsClient(client, roots);
