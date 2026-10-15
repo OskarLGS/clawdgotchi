@@ -1,7 +1,29 @@
-# AGENTS.md — guía para agentes de código
+# Clawdgotchi
 
-Firmware ESP8266 (PlatformIO / Arduino) para el GeekMagic SmallTV Ultra. Este
-documento es la referencia operativa para trabajar en el repo sin romper nada.
+Firmware ESP8266 (PlatformIO / Arduino) para el GeekMagic SmallTV Ultra:
+tamagotchi de la mascota de Claude con las cuotas de Claude Code + reloj, con
+login OAuth en el propio dispositivo.
+
+Normas comunes y conocimiento: `~/cerebro/AGENTS.md` (no repetir aquí lo que ya está allí).
+
+## Estado
+- **Familia:** firmware
+- **Publicado:** — (no va a tiendas). v1 mergeada en `main`, 9 tests nativos
+- **En curso:** nada abierto desde el 16-08-2026; operativo en el segundo cubo (`192.168.1.116`) con el firmware al día y OAuth en el dispositivo funcionando
+- **Siguiente:** recuperar por UART el primer cubo (`192.168.1.114`), soft-brickeado por un experimento con `CONT_STACKSIZE` (ver `docs/decisiones.md`)
+
+## Flujo de trabajo
+
+editar → `pio test -e native` (9/9) → `pio run -e ultra` con las build flags de
+WiFi → `tools/flash-ota.sh` → verificar en el cubo real (el visto bueno visual es
+de Oskar, ver `~/cerebro/AGENTS.md`). Tras un OTA el cubo tarda ~25-30 s en
+volver: espera con reintentos, no asumas que respondió.
+
+Al terminar un cambio:
+- Si flasheas, actualiza `backup/rescue-firmware.bin` con la última build buena.
+- Si añades un campo a `Config`, actualiza `config_codec.{h,cpp}` (JSON), el
+  formulario y el handler de `webui.h`, y comprueba que los tests nativos siguen
+  pasando.
 
 ## Comandos
 
@@ -56,8 +78,12 @@ CLAWD_WEB_AUTH=admin:<clave> tools/flash-ota.sh <ip-o-host>
 
 ## Convenciones y reglas duras
 
-- **Nunca** credenciales WiFi ni tokens en ficheros versionados. Solo por build
-  flags (`CLAWD_WIFI_SSID`/`CLAWD_WIFI_PASS`) en runtime.
+- Credenciales WiFi solo por build flags (`CLAWD_WIFI_SSID`/`CLAWD_WIFI_PASS`);
+  la norma general de secretos está en `~/cerebro/AGENTS.md`.
+- **No toques la configuración del cubo (`/cfg`) por curl para "demos".** Pisa los
+  ajustes del usuario (brillo, NTP…) y parece que "no se guardan". Si hace falta
+  cambiar el modo de pantalla, pídeselo a Oskar o lee y reescribe TODOS los
+  campos actuales.
 - **TLS solo desde `loop()`**, jamás dentro de un handler HTTP: la pila "cont"
   del WebServer es de ~4 KB y el handshake la revienta. El patrón es: el handler
   guarda datos + levanta un flag (`pollPedido`, `oauthPending`), y `loop()`
