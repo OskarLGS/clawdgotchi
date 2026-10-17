@@ -8,13 +8,13 @@ Normas comunes y conocimiento: `~/cerebro/AGENTS.md` (no repetir aquí lo que ya
 
 ## Estado
 - **Familia:** firmware
-- **Publicado:** — (no va a tiendas). v1 mergeada en `main`, 9 tests nativos
-- **En curso:** nada abierto desde el 16-08-2026; operativo en el segundo cubo (`192.168.1.116`) con el firmware al día y OAuth en el dispositivo funcionando
+- **Publicado:** — (no va a tiendas). v1 mergeada en `main`, 19 tests nativos
+- **En curso:** rama `fix/auditoria` (arreglos de la auditoría del 17-10-2026: refresh OAuth, `state` PKCE, `/update` sin reinicio, anti-CSRF, timeout del portal…) pendiente de flashear y verificar en el cubo (sección "Tras la auditoría" de `docs/verificacion-hardware.md`). Antes de eso: operativo en el segundo cubo (`192.168.1.116`) con el firmware al día y OAuth en el dispositivo funcionando
 - **Siguiente:** recuperar por UART el primer cubo (`192.168.1.114`), soft-brickeado por un experimento con `CONT_STACKSIZE` (ver `docs/decisiones.md`)
 
 ## Flujo de trabajo
 
-editar → `pio test -e native` (9/9) → `pio run -e ultra` con las build flags de
+editar → `pio test -e native` (19/19) → `pio run -e ultra` con las build flags de
 WiFi → `tools/flash-ota.sh` → verificar en el cubo real (el visto bueno visual es
 de Oskar, ver `~/cerebro/AGENTS.md`). Tras un OTA el cubo tarda ~25-30 s en
 volver: espera con reintentos, no asumas que respondió.
@@ -35,7 +35,7 @@ export PATH="$HOME/Library/Python/3.9/bin:$PATH"
 PLATFORMIO_BUILD_FLAGS="-DCLAWD_WIFI_SSID='\"MiRed\"' -DCLAWD_WIFI_PASS='\"MiClave\"'" \
   pio run -e ultra
 
-# Tests nativos (host) de la lógica pura — deben quedar 9/9:
+# Tests nativos (host) de la lógica pura — deben quedar 19/19:
 pio test -e native
 
 # Regenerar sprites (Pillow). Emite assets/*.png y src/sprites.h (generado):
@@ -50,7 +50,8 @@ CLAWD_WEB_AUTH=admin:<clave> tools/flash-ota.sh <ip-o-host>
 
 ## Verificación mínima antes de commitear
 
-1. `pio test -e native` → 9/9.
+1. `pio test -e native` → 19/19 (la CI de GitHub Actions corre esto y
+   `pio run -e ultra` sin credenciales en cada push/PR).
 2. `pio run -e ultra` (con las build flags de WiFi) → SUCCESS.
 3. `strings .pio/build/ultra/firmware.bin | grep -c "MiRed"` → ≥1 (las
    credenciales se incrustan) **y** `git diff` sin ninguna credencial.
@@ -59,15 +60,20 @@ CLAWD_WEB_AUTH=admin:<clave> tools/flash-ota.sh <ip-o-host>
 
 - **`lib/core/`** — C++ puro, sin Arduino, compila en host y en el ESP. Es lo
   único con tests (`test/test_native_*`).
-  - `quota.{h,cpp}` — `parseRateHeaders()`, `moodFor()`, `formatCountdown()`.
+  - `quota.{h,cpp}` — `parseRateHeaders()`, `moodFor()`, `formatCountdown()`,
+    `PollStatus` + `classifyPollCode()` (código HTTP → OK/AUTH/NET/API_ERROR).
   - `config_codec.{h,cpp}` — `Config`/`Tokens` ↔ JSON (ArduinoJson).
+  - `oauth_codec.{h,cpp}` — base64url, `urlEncode()`, `oauthSplitCode()`,
+    cuerpo del refresh, `parseTokenResponse()`, `validWebPass()`.
 - **`src/`** — código de dispositivo.
   - `main.cpp` — `setup()`/`loop()`: máquina de estados de arranque, planificador
     de poll con backoff, rotación de pantallas + fade, canje OAuth, modo seguro.
   - `claude_client.{h,cpp}` — `pollQuota()`, `refreshTokens()`, `tlsHeapOk()`.
-  - `oauth_login.h` — PKCE (verifier/challenge SHA256+base64url) + `oauthExchange()`.
-  - `webui.h` — HTML (PROGMEM con placeholders `%XX%`) + rutas `/`, `/cfg`,
-    `/token`, `/oauth/start`, `/oauth/finish`, `/status`, `/log`, `/update`.
+  - `oauth_login.h` — PKCE (verifier/challenge SHA256+base64url, `state`
+    aleatorio aparte y validado) + `oauthExchange()`.
+  - `webui.h` — HTML (PROGMEM con placeholders `%XX%`, enviado por trozos con
+    `sendTemplate()`) + rutas `/`, `/cfg`, `/token`, `/oauth/start`,
+    `/oauth/finish`, `/status`, `/log`, `/update`.
   - `wifi_portal.h` — portal cautivo de primer arranque.
   - `display.{h,cpp}`, `screen_tama.cpp`, `screen_clock.cpp` — pantalla ST7789.
   - `sprites.h` (**generado**, no editar), `sprites.cpp`, `mascot.h`.
@@ -90,9 +96,20 @@ CLAWD_WEB_AUTH=admin:<clave> tools/flash-ota.sh <ip-o-host>
   ejecuta el TLS.
 - Nada de arrays grandes en la pila de handlers: `Tokens` y buffers son `static`
   o globales (`g_tokens`, `s_iobuf`).
-- La web UI escapa todo texto de usuario con `htmlEscape()` (evita XSS y que un
-  valor con `%XX%` reescriba otro placeholder en los `String::replace`
-  encadenados).
+- La web UI escapa todo texto de usuario con `htmlEscape()` (XSS). Las páginas
+  grandes se envían con `sendTemplate()` (una pasada, por trozos): nada de
+  copiar la plantilla a un `String` y encadenar `.replace()`, que reserva ~5 KB
+  de golpe y fragmenta el heap que necesita el TLS.
+- **Todo handler POST llama a `sameOrigin()`** tras `webAuth()` (anti-CSRF: el
+  navegador reenvía solo la Basic Auth cacheada).
+- La contraseña web nunca se devuelve al navegador; campo vacío en `/cfg` = no
+  cambiarla. Al cambiarla, `otaUpdater.updateCredentials()` protege `/update`
+  en el acto.
+- Textos con tildes/ñ en el código: literales UTF-8 (`"contraseña"`), **no**
+  escapes `\xNN`: `"\xc3\xb1a"` se lee como el escape `\xb1a` y sale basura.
+- Versiones de plataforma y librerías **fijadas** en `platformio.ini`: el
+  presupuesto de heap del TLS depende de ellas. Subirlas a propósito y
+  verificar en el cubo.
 - `sprites.h` es **generado**: edita `tools/make_sprites.py` y regenera, no el
   header.
 - Textos de la interfaz y comentarios en español.
@@ -117,7 +134,8 @@ CLAWD_WEB_AUTH=admin:<clave> tools/flash-ota.sh <ip-o-host>
   SYS antes del WiFi): **prohibido**.
 - **La respuesta OAuth se lee con `http.getString()` antes de parsear**, no con
   `deserializeJson(stream)`: con el buffer TLS pequeño el stream se trocea y el
-  parseo falla.
+  parseo falla. Vale para el canje **y para el refresh**, que además va en JSON
+  con `client_id`, igual que el canje.
 - **LittleFS (config + tokens) persiste** entre reinicios y OTA. Si al probar
   parece que "no se guarda", casi seguro es que algo (¡o alguien!) reescribió
   `/config.json` después — `/cfg` sobrescribe TODOS los campos, así que un POST

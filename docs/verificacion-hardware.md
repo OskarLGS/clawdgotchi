@@ -1,6 +1,6 @@
 # Verificación hardware pendiente (tras recuperar el cubo por UART)
 
-Todo el firmware está construido, testeado (9 tests nativos) y revisado,
+Todo el firmware está construido, testeado (19 tests nativos) y revisado,
 pero desde el incidente del brickeo (ver `docs/decisiones.md`) las tareas
 7-15 se verificaron solo en compilación. Al recuperar el cubo:
 
@@ -10,7 +10,8 @@ pero desde el incidente del brickeo (ver `docs/decisiones.md`) las tareas
    `docs/decisiones.md`). Con eso el cubo vuelve a la red.
 2. Flashear la versión final: `pio run -e ultra && tools/flash-ota.sh`
    (compilar con `PLATFORMIO_BUILD_FLAGS` de WiFi o dejar que el portal pida la red).
-3. Guardar el token: web UI → poner password → pegar `claude setup-token`.
+3. Iniciar sesión: web UI → poner password → «Abrir login de Claude» y pegar
+   el código (alternativa: pegar un `claude setup-token`).
 
 ## Checklist (en orden)
 
@@ -35,5 +36,27 @@ pero desde el incidente del brickeo (ver `docs/decisiones.md`) las tareas
       `Clawdgotchi-Setup` y el formulario lista redes (o admite SSID manual).
 - [ ] Refresh de token: si se pegó también un refresh token, comprobar en
       /log que renueva al caducar (o forzar con expiresAt corto).
-- [ ] Animación: freeze de ~5 s durante el poll es esperado; si molesta,
-      ver "posibles mejoras" del README.
+- [ ] Animación: freeze de ~5 s durante el poll es esperado (el TLS bloquea
+      el `loop()`).
+
+## Tras la auditoría (rama `fix/auditoria`)
+
+Compilado solo en host contra las cabeceras del core; falta el visto bueno
+en el cubo:
+
+- [ ] `pio run -e ultra` → SUCCESS y RAM/flash similares a antes.
+- [ ] **Refresh real**: tras un login OAuth, esperar a que caduque (~8 h) o
+      forzar `exp` corto; `/log` debe decir `token renovado` y la mascota
+      seguir con datos.
+- [ ] Login OAuth completo con el `state` nuevo; pegar el código de una
+      sesión anterior → `/log` dice `oauth: state no coincide`.
+- [ ] Cambiar la contraseña en `/cfg` y, **sin reiniciar**, `/update` pide la
+      nueva. Guardar con el campo vacío → la contraseña no cambia.
+- [ ] Contraseña de 33 caracteres → 400 con mensaje legible (con «ñ»).
+- [ ] La página `/` carga entera (barras, ajustes, sesión) y el heap libre
+      es igual o mejor que antes.
+- [ ] `tools/flash-ota.sh` con `CLAWD_WEB_AUTH` sigue funcionando.
+- [ ] Modelo inválido a propósito (p.ej. `claude-no-existe`) → aviso en la
+      web UI con el código HTTP; restaurarlo → desaparece en el siguiente poll.
+- [ ] Apagar el router y reiniciar el cubo (entra al portal); encender el
+      router → en ≤5 min el cubo vuelve solo a la red.
