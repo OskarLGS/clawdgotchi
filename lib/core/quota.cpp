@@ -9,7 +9,7 @@ static bool parsePct(const char* s, uint8_t& outPct, double& outRaw) {
   if (!s || !*s) return false;
   char* end = nullptr;
   double v = strtod(s, &end);
-  if (end == s || v < 0) return false;
+  if (end == s || !isfinite(v) || v < 0) return false;  // rechaza nan/inf
   double pct = round(v * 100.0);
   outPct = (uint8_t)(pct > 100 ? 100 : pct);
   outRaw = v;
@@ -40,6 +40,12 @@ Mood moodFor(const QuotaSnapshot& q, bool online) {
   if (worst >= 75) return Mood::STRESSED;
   if (worst >= 50) return Mood::UNEASY;
   return Mood::HAPPY;
+}
+PollStatus classifyPollCode(int code) {
+  if (code == 200 || code == 429) return PollStatus::OK;
+  if (code == 401 || code == 403) return PollStatus::AUTH_FAILED;
+  if (code <= 0 || code == 408 || code >= 500) return PollStatus::NET_ERROR;
+  return PollStatus::API_ERROR;
 }
 void formatCountdown(uint32_t now, uint32_t reset, char* buf, size_t n) {
   uint32_t s = reset > now ? reset - now : 0;

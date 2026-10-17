@@ -22,6 +22,22 @@ void test_config_defaults_on_missing_fields() {
   TEST_ASSERT_TRUE(configFromJson("{}", d));
   TEST_ASSERT_EQUAL(5, d.pollMinutes);   // defaults sobreviven
 }
+void test_config_model_default_and_roundtrip() {
+  Config d;
+  TEST_ASSERT_TRUE(configFromJson("{\"model\":\"\"}", d));
+  TEST_ASSERT_EQUAL_STRING("claude-haiku-4-5", d.model);  // vacio -> default
+  strcpy(d.model, "claude-haiku-5-5");
+  char buf[768];
+  TEST_ASSERT_TRUE(configToJson(d, buf, sizeof buf));
+  Config e;
+  TEST_ASSERT_TRUE(configFromJson(buf, e));
+  TEST_ASSERT_EQUAL_STRING("claude-haiku-5-5", e.model);
+}
+void test_to_json_detects_small_buffer() {
+  Config c;
+  char small[32];
+  TEST_ASSERT_FALSE(configToJson(c, small, sizeof small));
+}
 void test_tokens_roundtrip() {
   Tokens t; strcpy(t.access, "at"); strcpy(t.refresh, "rt"); t.expiresAt = 123;
   char buf[3072];
@@ -36,6 +52,8 @@ int main() {
   RUN_TEST(test_config_roundtrip);
   RUN_TEST(test_config_bad_json);
   RUN_TEST(test_config_defaults_on_missing_fields);
+  RUN_TEST(test_config_model_default_and_roundtrip);
+  RUN_TEST(test_to_json_detects_small_buffer);
   RUN_TEST(test_tokens_roundtrip);
   return UNITY_END();
 }
