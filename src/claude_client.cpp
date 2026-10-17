@@ -1,4 +1,5 @@
 #include "claude_client.h"
+#include "oauth_codec.h"
 #include <WiFiClientSecureBearSSL.h>
 #include <ESP8266HTTPClient.h>
 #include <ArduinoJson.h>
@@ -11,7 +12,8 @@
 // arrancar. Con 8192 el consumo baja a ~11-12KB y cabe con margen. Requiere
 // que los registros TLS del servidor quepan en 8KB (la respuesta es diminuta y
 // las cadenas de certificados de api.anthropic.com / platform.claude.com
-// caben). Sin MFLN (el servidor lo rechaza), 8192 es el minimo seguro.
+// caben). Sin MFLN (el servidor lo rechaza), 8192 es el minimo seguro. Lo
+// comparten poll, refresh y canje OAuth.
 static const int RX_BUF = 8192, TX_BUF = 512;
 
 static void tlsClient(BearSSL::WiFiClientSecure& c, BearSSL::X509List& roots) {
@@ -19,19 +21,19 @@ static void tlsClient(BearSSL::WiFiClientSecure& c, BearSSL::X509List& roots) {
   c.setBufferSizes(RX_BUF, TX_BUF);
 }
 
-// El handshake BearSSL necesita un bloque contiguo grande (RX 16KB + estructuras).
-// Si el heap fragmentado no lo tiene, intentarlo revienta el firmware (crash-loop).
-// Mejor abortar limpiamente y reintentar en el siguiente ciclo. 20KB deja margen
-// sobre los ~16-18KB medidos como minimo del handshake.
+// Si el heap fragmentado no tiene un bloque contiguo para el handshake,
+// intentarlo revienta el firmware (crash-loop). Mejor abortar limpiamente y
+// reintentar en el siguiente ciclo. Con RX 8192 el handshake necesita
+// ~11-12KB; 13000 deja margen.
 bool tlsHeapOk(const char* who) {
-  // Con buffer RX de 8192 el handshake necesita ~11-12KB; 13000 deja margen.
   uint32_t blk = ESP.getMaxFreeBlockSize();
   if (blk >= 13000) return true;
   LOGN("%s: heap bajo (%u), salto TLS", who, blk);
   return false;
 }
 
-PollStatus pollQuota(const char* accessToken, QuotaSnapshot& out) {
+PollStatus pollQuota(const char* accessToken, const char* model, QuotaSnapshot& out, int& httpCode) {
+  httpCode = 0;
   if (!tlsHeapOk("poll")) return PollStatus::NET_ERROR;
   BearSSL::WiFiClientSecure client;
   BearSSL::X509List roots(CA_ROOTS);
@@ -48,16 +50,24 @@ PollStatus pollQuota(const char* accessToken, QuotaSnapshot& out) {
                         "anthropic-ratelimit-unified-7d-reset",
                         "anthropic-ratelimit-unified-5h-status"};
   http.collectHeaders(keep, 5);
-  int code = http.POST("{\"model\":\"claude-haiku-4-5-20251001\",\"max_tokens\":1,"
-                       "\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}");
-  PollStatus st;
-  if (code == 200 || code == 429) {   // 429 = cuota agotada: las cabeceras vienen igual
+  // Peticion minima: solo interesan las cabeceras de cuota. El modelo sale de
+  // la config (serializado con ArduinoJson: es texto de usuario).
+  JsonDocument req;
+  req["model"] = model;
+  req["max_tokens"] = 1;
+  req["messages"][0]["role"] = "user";
+  req["messages"][0]["content"] = "hi";
+  String body;
+  serializeJson(req, body);
+  int code = http.POST(body);
+  httpCode = code;
+  PollStatus st = classifyPollCode(code);
+  if (st == PollStatus::OK) {   // 429 = cuota agotada: las cabeceras vienen igual
     bool ok = parseRateHeaders(http.header(keep[0]).c_str(), http.header(keep[1]).c_str(),
                                http.header(keep[2]).c_str(), http.header(keep[3]).c_str(),
                                http.header(keep[4]).c_str(), out);
-    st = ok ? PollStatus::OK : PollStatus::NET_ERROR;
-  } else if (code == 401 || code == 403) st = PollStatus::AUTH_FAILED;
-  else st = PollStatus::NET_ERROR;
+    if (!ok) st = PollStatus::API_ERROR;  // 200 sin cabeceras: la API cambio, no es la red
+  }
   LOGN("poll code=%d 5h=%u%% 7d=%u%%", code, out.pct5h, out.pctWeek);
   http.end();
   return st;
@@ -70,22 +80,27 @@ bool refreshTokens(Tokens& t) {
   // parar. No reintenta: loop() ya evita llamar aqui hasta que NTP sincronice.
   if (time(nullptr) < 1600000000) { LOGN("refresh omitido: sin NTP"); return false; }
   if (!tlsHeapOk("refresh")) return false;
+  // Mismo formato que el canje inicial (oauthExchange): JSON con client_id. El
+  // refresh_token viaja escapado por ArduinoJson, no concatenado a mano.
+  static char body[700];  // static: refresh[512] + campos; fuera de la pila
+  if (!buildRefreshBody(t.refresh, OAUTH_CLIENT_ID, body, sizeof body)) return false;
   BearSSL::WiFiClientSecure client;
   BearSSL::X509List roots(CA_ROOTS);
   tlsClient(client, roots);
   HTTPClient http;
-  http.begin(client, "https://platform.claude.com/v1/oauth/token");
-  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-  int code = http.POST(String("grant_type=refresh_token&refresh_token=") + t.refresh);
-  if (code != 200) { LOGN("refresh code=%d", code); http.end(); return false; }
-  JsonDocument d;
-  DeserializationError e = deserializeJson(d, http.getStream());
+  http.begin(client, OAUTH_TOKEN_URL);
+  http.addHeader("Content-Type", "application/json");
+  int code = http.POST((const uint8_t*)body, strlen(body));
+  // getString() antes de parsear, nunca deserializeJson(stream): con el buffer
+  // TLS de 8KB el stream llega troceado y el parseo falla (ver AGENTS.md).
+  String resp = http.getString();
   http.end();
-  if (e || !d["access_token"].is<const char*>()) return false;
-  snprintf(t.access, sizeof t.access, "%s", (const char*)d["access_token"]);
-  if (d["refresh_token"].is<const char*>())
-    snprintf(t.refresh, sizeof t.refresh, "%s", (const char*)d["refresh_token"]);
-  t.expiresAt = (uint32_t)time(nullptr) + (d["expires_in"] | 28800);
+  if (code != 200 || !parseTokenResponse(resp.c_str(), (uint32_t)time(nullptr), true, t)) {
+    JsonDocument d;
+    deserializeJson(d, resp);
+    LOGN("refresh fallo: code=%d err=%s", code, (const char*)(d["error"] | ""));
+    return false;
+  }
   LOGN("token renovado");
   return true;
 }

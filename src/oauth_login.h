@@ -7,102 +7,78 @@
 #include "store.h"
 #include "certs.h"
 #include "netlog.h"
-#include "claude_client.h"  // tlsHeapOk()
+#include "oauth_codec.h"
+#include "claude_client.h"  // tlsHeapOk(), OAUTH_CLIENT_ID, OAUTH_TOKEN_URL
 
 // Login OAuth PKCE dentro del cubo (Task 16): el usuario abre /oauth/start en
 // el movil, hace login en claude.ai y pega el codigo que le devuelven en
 // /oauth/finish. Sin ordenador ni CLI.
-static const char* OAUTH_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 static const char* OAUTH_REDIRECT_URI = "https://platform.claude.com/oauth/code/callback";
 static const char* OAUTH_AUTHORIZE_BASE = "https://claude.ai/oauth/authorize";
-static const char* OAUTH_SCOPE = "org:create_api_key user:profile user:inference";
+// Minimo privilegio: el cubo solo hace inferencia (el poll) y nada mas. Sin
+// org:create_api_key, que permitiria crear API keys con este token.
+static const char* OAUTH_SCOPE = "user:profile user:inference";
 
-// code_verifier de la sesion de login en curso. String (no buffer fijo en
-// pila): oauthBuildUrl()/oauthExchange() los llaman handlers HTTP con pila
-// "cont" de 4KB, y ~43 bytes en el heap no la aprietan.
-static String g_verifier;
+// code_verifier y state de la sesion de login en curso (43 chars base64url de
+// 32 bytes aleatorios cada uno; buffers globales, no en la pila "cont" de los
+// handlers). Son valores DISTINTOS: el state viaja por la URL y vuelve en el
+// "code#state" que se pega; el verifier es secreto y solo sale en el canje.
+static char g_verifier[48];
+static char g_state[48];
 
-// base64url sin padding: tabla estandar con +/ sustituidos por -_ y sin '='
-// final (elegido en vez de post-procesar base64::encode porque el original
-// ya usa +/ y hay que tocar cada caracter igualmente).
-inline String base64UrlEncode(const uint8_t* data, size_t len) {
-  static const char T[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-  String out;
-  out.reserve((len + 2) / 3 * 4);
-  size_t i = 0;
-  for (; i + 3 <= len; i += 3) {
-    uint32_t v = ((uint32_t)data[i] << 16) | ((uint32_t)data[i+1] << 8) | data[i+2];
-    out += T[(v >> 18) & 63]; out += T[(v >> 12) & 63]; out += T[(v >> 6) & 63]; out += T[v & 63];
-  }
-  size_t rem = len - i;
-  if (rem == 1) {
-    uint32_t v = (uint32_t)data[i] << 16;
-    out += T[(v >> 18) & 63]; out += T[(v >> 12) & 63];
-  } else if (rem == 2) {
-    uint32_t v = ((uint32_t)data[i] << 16) | ((uint32_t)data[i+1] << 8);
-    out += T[(v >> 18) & 63]; out += T[(v >> 12) & 63]; out += T[(v >> 6) & 63];
-  }
-  return out;
-}
-
-inline String urlEncode(const String& in) {
-  String out;
-  out.reserve(in.length() * 3);
-  const char* hex = "0123456789ABCDEF";
-  for (size_t i = 0; i < in.length(); i++) {
-    uint8_t c = (uint8_t)in[i];
-    if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') out += (char)c;
-    else { out += '%'; out += hex[c >> 4]; out += hex[c & 15]; }
-  }
-  return out;
-}
-
-// Genera un code_verifier nuevo (32 bytes de ESP.random(), el RNG hardware
-// real con WiFi activo -no random()/Math-) y devuelve la URL de autorizacion
-// completa con el code_challenge PKCE (S256) derivado de el.
-inline String oauthBuildUrl() {
+// 32 bytes de ESP.random() (RNG hardware real con WiFi activo) en base64url.
+inline void oauthRandom43(char* out, size_t n) {
   uint8_t raw[32];
   for (int i = 0; i < 32; i += 4) {
     uint32_t r = ESP.random();
     raw[i] = r; raw[i+1] = r >> 8; raw[i+2] = r >> 16; raw[i+3] = r >> 24;
   }
-  g_verifier = base64UrlEncode(raw, sizeof raw);
+  base64UrlEncode(raw, sizeof raw, out, n);
+}
+
+// Genera verifier + state nuevos y devuelve la URL de autorizacion completa
+// con el code_challenge PKCE (S256) derivado del verifier.
+inline String oauthBuildUrl() {
+  oauthRandom43(g_verifier, sizeof g_verifier);
+  oauthRandom43(g_state, sizeof g_state);
 
   br_sha256_context ctx;
   uint8_t digest[32];
   br_sha256_init(&ctx);
-  br_sha256_update(&ctx, g_verifier.c_str(), g_verifier.length());
+  br_sha256_update(&ctx, g_verifier, strlen(g_verifier));
   br_sha256_out(&ctx, digest);
-  String challenge = base64UrlEncode(digest, sizeof digest);
+  char challenge[48];
+  base64UrlEncode(digest, sizeof digest, challenge, sizeof challenge);
 
   String scope = OAUTH_SCOPE;
   scope.replace(" ", "+");
+  char redirect[96];
+  urlEncode(OAUTH_REDIRECT_URI, redirect, sizeof redirect);
 
-  String url = String(OAUTH_AUTHORIZE_BASE) + "?code=true&client_id=" + OAUTH_CLIENT_ID +
-               "&response_type=code&redirect_uri=" + urlEncode(OAUTH_REDIRECT_URI) +
-               "&scope=" + scope +
-               "&code_challenge=" + challenge + "&code_challenge_method=S256" +
-               "&state=" + g_verifier;
-  return url;
+  return String(OAUTH_AUTHORIZE_BASE) + "?code=true&client_id=" + OAUTH_CLIENT_ID +
+         "&response_type=code&redirect_uri=" + redirect + "&scope=" + scope +
+         "&code_challenge=" + challenge + "&code_challenge_method=S256" +
+         "&state=" + g_state;
 }
 
 // El usuario pega "code#state" (formato que devuelve claude.ai) o solo el
-// code si no hay '#'. Canjea el code por tokens via TLS (patron identico a
-// refreshTokens() en claude_client.cpp: BearSSL + CA_ROOTS + buffers
-// 16384/512) y rellena out. NO llamar desde un handler HTTP -solo desde
-// loop()-, ver oauthPending en main.cpp.
+// code si no hay '#'. Si trae state debe coincidir con el de esta sesion
+// (rechaza codigos de otra sesion de login). Canjea el code por tokens via
+// TLS y rellena out solo si el canje sale bien. NO llamar desde un handler
+// HTTP -solo desde loop()-, ver oauthPending en main.cpp.
 inline bool oauthExchange(const String& codeInput, Tokens& out) {
-  String code = codeInput, state = g_verifier;
-  int hash = codeInput.indexOf('#');
-  if (hash >= 0) { code = codeInput.substring(0, hash); state = codeInput.substring(hash + 1); }
-  code.trim(); state.trim();
-  if (!code.length()) { LOGN("oauth: code vacio"); return false; }
+  if (!g_verifier[0]) { LOGN("oauth: sin sesion de login (reinicio?), vuelve a abrir el login"); return false; }
+  char code[256], state[64];
+  if (!oauthSplitCode(codeInput.c_str(), code, sizeof code, state, sizeof state)) {
+    LOGN("oauth: code vacio o demasiado largo"); return false;
+  }
+  if (state[0] && strcmp(state, g_state) != 0) { LOGN("oauth: state no coincide"); return false; }
   if (!tlsHeapOk("oauth")) return false;
 
   JsonDocument req;
   req["grant_type"] = "authorization_code";
   req["code"] = code;
-  req["state"] = state;
+  req["state"] = g_state;
   req["client_id"] = OAUTH_CLIENT_ID;
   req["redirect_uri"] = OAUTH_REDIRECT_URI;
   req["code_verifier"] = g_verifier;
@@ -112,16 +88,11 @@ inline bool oauthExchange(const String& codeInput, Tokens& out) {
   BearSSL::WiFiClientSecure client;
   BearSSL::X509List roots(CA_ROOTS);
   client.setTrustAnchors(&roots);
-  // platform.claude.com no soporta MFLN (probado), asi que no se puede pedir
-  // fragmentos pequenos. Pero el consumo de heap del handshake escala con el
-  // buffer RX: con 16384 el spike consumio ~22KB y en este chip (pantalla+
-  // sprites) solo hay ~19KB contiguos -> fallaba (ssl -1000). Con RX 8192 el
-  // handshake consume ~14KB y cabe. Requiere que los registros TLS del
-  // servidor quepan en 8KB (lo habitual). El poll (api.anthropic.com) sigue en
-  // 16384 porque ese si funciona y ahi la cadena es distinta.
+  // Mismo buffer RX 8192 que poll/refresh (ver claude_client.cpp): con 16384
+  // el handshake no cabe en el heap de este chip.
   client.setBufferSizes(8192, 512);
   HTTPClient http;
-  http.begin(client, "https://platform.claude.com/v1/oauth/token");
+  http.begin(client, OAUTH_TOKEN_URL);
   http.addHeader("Content-Type", "application/json");
   int code_ = http.POST(body);
   // Lee el cuerpo completo a String (mas robusto que parsear el stream con el
@@ -129,24 +100,14 @@ inline bool oauthExchange(const String& codeInput, Tokens& out) {
   // cuerpo trae {"error":...} con el motivo exacto (no sensible).
   String resp = http.getString();
   http.end();
-  JsonDocument d;
-  DeserializationError e = deserializeJson(d, resp);
-  bool hasTok = d["access_token"].is<const char*>();
-  if (code_ != 200 || e || !hasTok) {
-    // En fallo se loguea el motivo del servidor (error field, no sensible).
-    const char* err = d["error"] | "";
-    LOGN("oauth fallo canje: code=%d err=%s perr=%s", code_, err, e.c_str());
+  if (code_ != 200 || !parseTokenResponse(resp.c_str(), (uint32_t)time(nullptr), false, out)) {
+    JsonDocument d;
+    deserializeJson(d, resp);
+    LOGN("oauth fallo canje: code=%d err=%s", code_, (const char*)(d["error"] | ""));
     return false;
   }
-
-  snprintf(out.access, sizeof out.access, "%s", (const char*)d["access_token"]);
-  out.refresh[0] = 0;
-  if (d["refresh_token"].is<const char*>())
-    snprintf(out.refresh, sizeof out.refresh, "%s", (const char*)d["refresh_token"]);
-  // Guard NTP identico a refreshTokens(): sin hora real expiresAt seria
-  // basura; se deja en 0 y el refresh reactivo (runPoll en main.cpp) se
-  // encarga en cuanto haga falta.
-  out.expiresAt = (time(nullptr) < 1600000000) ? 0 : (uint32_t)time(nullptr) + (d["expires_in"] | 28800);
+  // Un solo uso: el verifier no se reutiliza para otro canje.
+  g_verifier[0] = 0; g_state[0] = 0;
   LOGN("oauth exchange ok");
   return true;
 }

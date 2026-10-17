@@ -13,6 +13,7 @@ struct Config {
   uint16_t rotateSeconds = 15;
   uint16_t fadeMs = 300;                         // duración total del fade entre pantallas (0 = instantáneo)
   char webPass[33] = "";                         // "" = sin password (hasta guardar token)
+  char model[48] = "claude-haiku-4-5";           // modelo de la peticion minima del poll
 };
 
 struct Tokens {

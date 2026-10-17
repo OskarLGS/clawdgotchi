@@ -19,6 +19,7 @@ bool configFromJson(const char* json, Config& out) {
   out.rotateSeconds= d["rot"]  | out.rotateSeconds;
   out.fadeMs       = d["fade"] | out.fadeMs;
   if (d["webpass"].is<const char*>()) cp(out.webPass, sizeof out.webPass, d["webpass"]);
+  if (d["model"].is<const char*>() && d["model"].as<const char*>()[0]) cp(out.model, sizeof out.model, d["model"]);
   return true;
 }
 
@@ -34,7 +35,9 @@ bool configToJson(const Config& c, char* out, size_t n) {
   d["rot"] = c.rotateSeconds;
   d["fade"] = c.fadeMs;
   d["webpass"] = c.webPass;
-  return serializeJson(d, out, n) > 0;
+  d["model"] = c.model;
+  // measureJson: serializeJson trunca en silencio si el buffer no basta
+  return measureJson(d) < n && serializeJson(d, out, n) > 0;
 }
 
 bool tokensFromJson(const char* json, Tokens& out) {
@@ -52,5 +55,6 @@ bool tokensToJson(const Tokens& t, char* out, size_t n) {
   d["access"] = t.access;
   d["refresh"] = t.refresh;
   d["exp"] = t.expiresAt;
-  return serializeJson(d, out, n) > 0;
+  // measureJson: serializeJson trunca en silencio si el buffer no basta
+  return measureJson(d) < n && serializeJson(d, out, n) > 0;
 }

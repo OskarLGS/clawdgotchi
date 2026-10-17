@@ -23,6 +23,20 @@ void test_parse_clamps_and_flags_exhausted() {
   parseRateHeaders("0.5", "1", "0.5", "1", "rejected", q);
   TEST_ASSERT_TRUE(q.exhausted);
 }
+void test_parse_rejects_nan_inf() {
+  QuotaSnapshot q;
+  TEST_ASSERT_FALSE(parseRateHeaders("nan", "1", "0.1", "1", "allowed", q));
+  TEST_ASSERT_FALSE(parseRateHeaders("0.1", "1", "inf", "1", "allowed", q));
+}
+void test_classify_poll_code() {
+  TEST_ASSERT_EQUAL((int)PollStatus::OK, (int)classifyPollCode(200));
+  TEST_ASSERT_EQUAL((int)PollStatus::OK, (int)classifyPollCode(429));
+  TEST_ASSERT_EQUAL((int)PollStatus::AUTH_FAILED, (int)classifyPollCode(401));
+  TEST_ASSERT_EQUAL((int)PollStatus::NET_ERROR, (int)classifyPollCode(-1));
+  TEST_ASSERT_EQUAL((int)PollStatus::NET_ERROR, (int)classifyPollCode(529));
+  TEST_ASSERT_EQUAL((int)PollStatus::API_ERROR, (int)classifyPollCode(400));
+  TEST_ASSERT_EQUAL((int)PollStatus::API_ERROR, (int)classifyPollCode(404));
+}
 void test_moods() {
   QuotaSnapshot q{};
   q.valid = true;
@@ -56,6 +70,8 @@ int main() {
   RUN_TEST(test_parse_ok);
   RUN_TEST(test_parse_garbage_fails);
   RUN_TEST(test_parse_clamps_and_flags_exhausted);
+  RUN_TEST(test_parse_rejects_nan_inf);
+  RUN_TEST(test_classify_poll_code);
   RUN_TEST(test_moods);
   RUN_TEST(test_countdown_format);
   return UNITY_END();

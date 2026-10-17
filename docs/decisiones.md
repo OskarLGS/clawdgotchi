@@ -36,7 +36,8 @@
 
 Registro para Oskar de todo lo decidido sin consultarle (sesión del
 2026-08-16, mientras estaba fuera). Orden cronológico. El detalle fino de
-cada tarea está en `.superpowers/sdd/2026-08-16-clawdgotchi/progress.md`.
+cada tarea está en `.superpowers/sdd/2026-08-16-clawdgotchi/progress.md`
+(fichero local de aquella sesión, no versionado).
 
 ## Antes de quedarme solo (ya comunicadas en el chat)
 
@@ -49,6 +50,7 @@ cada tarea está en `.superpowers/sdd/2026-08-16-clawdgotchi/progress.md`.
    se recaptura y se reflashea por OTA.
 4. **Buffers TLS RX=16384/TX=512**: el servidor rechazó MFLN
    (`mfln1024=0`); medido en hardware con 13 KB de margen en el pico.
+   *(Superado: luego se bajó a RX=8192, ver `AGENTS.md`.)*
 
 ## En autonomía
 

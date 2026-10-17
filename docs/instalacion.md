@@ -40,7 +40,7 @@ CLAWD_WEB_AUTH=admin:clave tools/flash-ota.sh   # si la web UI tiene password
 platform.claude.com) + POST mínimo a `api.anthropic.com/v1/messages`.
 Resultado con token real (2026-08-16): **code=200 con las 5 cabeceras de
 cuota** (5h=0.12, 7d=0.18). `mfln1024=0` (el servidor rechaza MFLN) →
-buffers definitivos **RX=16384, TX=512**. Heap: maxblock 35656 antes del
+buffers **RX=16384, TX=512** (después se bajó a **8192**: con pantalla y sprites 16384 no cabía; ver `AGENTS.md`). Heap: maxblock 35656 antes del
 handshake, 13024 en el punto más bajo — margen suficiente. Checkpoint
 superado.
 

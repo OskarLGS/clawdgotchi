@@ -77,6 +77,9 @@ Después, en `http://clawdgotchi.local/` (o por IP), **usuario `admin`**:
    pégalo. El cubo hace el canje OAuth y se renueva solo para siempre.
    - *Alternativa manual:* pega un token de `claude setup-token`.
 3. Ajusta pantalla, brillo, rotación, fade, zona horaria y servidor NTP a gusto.
+   El *modelo para consultar la cuota* (por defecto `claude-haiku-4-5`) solo
+   hace falta tocarlo si Anthropic lo retira: la web UI avisa si la API rechaza
+   la consulta.
 
 ## Desarrollo
 
@@ -88,7 +91,7 @@ PLATFORMIO_BUILD_FLAGS="-DCLAWD_WIFI_SSID='\"MiRed\"' -DCLAWD_WIFI_PASS='\"MiCla
   pio run -e ultra
 
 # Tests de la lógica pura (parseo de cuotas, humor, countdowns, config)
-pio test -e native        # 9 tests
+pio test -e native        # 19 tests (también los corre la CI)
 
 # Regenerar los sprites de la mascota (Pillow)
 python3 tools/make_sprites.py
@@ -107,6 +110,7 @@ convenciones y las lecciones de hardware.
 |---|---|
 | `lib/core/quota` | Parseo de cabeceras de rate-limit, humor de la mascota, countdowns (testeable) |
 | `lib/core/config_codec` | Config y tokens ↔ JSON (testeable) |
+| `lib/core/oauth_codec` | Utilidades OAuth (base64url, refresh, respuesta de tokens) y validación de contraseña (testeable) |
 | `src/main.cpp` | Orquestador: estados de arranque, planificador de poll, rotación, modo seguro |
 | `src/claude_client` | Poll de cuota y refresh de token por TLS (BearSSL, CA pineada) |
 | `src/oauth_login.h` | Login OAuth PKCE en el dispositivo |
@@ -118,8 +122,16 @@ convenciones y las lecciones de hardware.
 
 ## Seguridad
 
-- La web UI lleva contraseña (usuario `admin`); los **tokens nunca se muestran**
-  ni se exportan por la interfaz.
+- La web UI lleva contraseña (usuario `admin`, 1-32 caracteres); ni los
+  **tokens** ni la propia contraseña se devuelven nunca al navegador. Cambiarla
+  protege también `/update` al momento, sin reiniciar.
+- Los formularios rechazan peticiones de otro origen (anti-CSRF).
+- Login OAuth con PKCE: `state` aleatorio independiente del `code_verifier`, y
+  scopes mínimos (`user:profile user:inference`).
+- Límites conocidos: es HTTP plano en tu LAN (la Basic Auth viaja sin cifrar)
+  y, hasta que pones contraseña, cualquiera en la red puede configurarlo. El AP
+  del portal de primer arranque es abierto; si ya había red guardada, el cubo
+  reintenta conectarse cada 5 min en vez de quedarse en el portal.
 - TLS con raíces de CA **pineadas** (`src/certs.h`), nunca `setInsecure`.
 - Las credenciales WiFi solo entran por build flags; **no hay secretos en el repo**.
 
@@ -127,6 +139,12 @@ convenciones y las lecciones de hardware.
 
 - El flujo OAuth y las cabeceras de rate-limit de Claude Code **no son API
   pública documentada** de Anthropic; funcionan hoy pero podrían cambiar.
+- Usa el token OAuth de **tu** suscripción de Claude desde un dispositivo que
+  no es Claude Code. Comprueba que encaja con los términos de uso de Anthropic
+  antes de usarlo; es responsabilidad de quien lo instala.
+- Cada consulta es una petición real a la API (1 token de salida): con el
+  intervalo por defecto (5 min) son ~288 al día, que cuentan —muy poco— para
+  tu cuota.
 - El ESP8266 va justo de RAM: el handshake TLS usa un buffer de 8 KB (ver
   `AGENTS.md`); sin MFLN no cabía más.
 

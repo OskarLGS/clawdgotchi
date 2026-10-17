@@ -39,6 +39,10 @@ bool authBad = false;
 // loop(), nunca dentro del handler HTTP.
 bool oauthPending = false;
 String g_pendingCode;
+// Resultado del ultimo poll, para /status y el aviso de la web UI (extern en
+// webui.h). API_ERROR = la API rechazo la peticion (p.ej. modelo retirado).
+PollStatus lastPollStatus = PollStatus::OK;
+int lastPollCode = 0;
 
 void setup() {
   // Primera linea, antes de tocar LittleFS: un FS corrupto que haga crashear
@@ -83,7 +87,8 @@ void setup() {
     if (!webAuth(server, cfg)) return;
     server.send(200, "text/plain", String("valid=") + quotaNow.valid + " 5h=" + quotaNow.pct5h +
                 "% 7d=" + quotaNow.pctWeek + "% exhausted=" + quotaNow.exhausted +
-                " lastPollOk=" + lastPollOk + " authBad=" + authBad);
+                " lastPollOk=" + lastPollOk + " authBad=" + authBad +
+                " lastStatus=" + (int)lastPollStatus + " lastCode=" + lastPollCode);
   });
   otaBegin(server, cfg);
   server.begin();
@@ -92,7 +97,8 @@ void setup() {
 
 // Planificador de poll: intervalo cfg.pollMinutes, con backoff exponencial
 // 1,2,4,...,32 min mientras pollQuota devuelva NET_ERROR (se resetea a 1 en
-// cuanto un poll sale OK). /poll fuerza un poll inmediato via pollPedido.
+// cuanto un poll sale OK). AUTH_FAILED y API_ERROR no son transitorios: se
+// reintentan en el ciclo normal. /poll fuerza un poll inmediato via pollPedido.
 static void runPoll(uint32_t nowMs, bool ntpVisto) {
   static uint32_t nextPollMs = 0;
   static uint32_t backoffMin = 1;
@@ -127,13 +133,14 @@ static void runPoll(uint32_t nowMs, bool ntpVisto) {
     }
   }
 
-  PollStatus st = pollQuota(t.access, quotaNow);
+  PollStatus st = pollQuota(t.access, cfg.model, quotaNow, lastPollCode);
   if (st == PollStatus::AUTH_FAILED) {
     bool recovered = t.refresh[0] && refreshTokens(t) && saveTokens(t) &&
-                      pollQuota(t.access, quotaNow) == PollStatus::OK;
+                      pollQuota(t.access, cfg.model, quotaNow, lastPollCode) == PollStatus::OK;
     authBad = !recovered;
     if (recovered) st = PollStatus::OK;
   }
+  lastPollStatus = st;
   LOGN("poll st=%d 5h=%u%% 7d=%u%%", (int)st, quotaNow.pct5h, quotaNow.pctWeek);
 
   if (st == PollStatus::OK) {
@@ -144,7 +151,8 @@ static void runPoll(uint32_t nowMs, bool ntpVisto) {
   } else if (st == PollStatus::NET_ERROR) {
     nextPollMs = nowMs + backoffMin * 60000UL;
     if (backoffMin < 32) backoffMin *= 2;
-  } else {  // AUTH_FAILED persistente: no machacar, reintenta en el ciclo normal
+  } else {  // AUTH_FAILED persistente o API_ERROR: no machacar, reintenta en el ciclo normal
+    if (st == PollStatus::API_ERROR) LOGN("API rechazo el poll (HTTP %d): revisa el modelo", lastPollCode);
     nextPollMs = nowMs + (uint32_t)cfg.pollMinutes * 60000UL;
   }
 }
