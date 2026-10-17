@@ -80,6 +80,18 @@ inline bool wifiConnectOrPortal(Config& cfg) {
     ESP.restart();
   });
   portal.begin();
-  while (true) { dns.processNextRequest(); portal.handleClient(); delay(2); }  // sale por restart
+  // Si ya habia red configurada, lo normal es que el router estuviera caido al
+  // arrancar: no quedarse en AP para siempre. Cada 5 min sin nadie conectado
+  // al AP se reinicia para reintentar la red guardada (ESP.restart() es un
+  // reset "suave": no cuenta como crash para el modo seguro). Sin red
+  // configurada (cubo virgen) el portal espera indefinidamente.
+  uint32_t since = millis();
+  while (true) {  // sale por restart
+    dns.processNextRequest(); portal.handleClient(); delay(2);
+    if (cfg.wifiSsid[0] && millis() - since > 300000UL) {
+      if (WiFi.softAPgetStationNum() == 0) { LOGN("portal: reintento WiFi guardada"); ESP.restart(); }
+      since = millis();
+    }
+  }
   return false;  // inalcanzable, silencia -Wreturn-type
 }
